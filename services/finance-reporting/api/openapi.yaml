@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: finance-reporting API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /reports:
+    get:
+      summary: Get finance report
+      responses:
+        '200':
+          description: OK
+  /reports/ingest:
+    post:
+      summary: Ingest domain metrics for reporting
+      responses:
+        '200':
+          description: Updated
+  /reports/export:
+    post:
+      summary: Export report
+      responses:
+        '201':
+          description: Created
+  /reports/exports:
+    get:
+      summary: List generated exports
+      responses:
+        '200':
+          description: OK
+  /reports/schedules:
+    get:
+      summary: List report schedules
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create report schedule
+      responses:
+        '201':
+          description: Created
+  /reports/schedules/{id}/run:
+    post:
+      summary: Run report schedule
+      responses:
+        '201':
+          description: Created
+  /events:
+    get:
+      summary: List reporting events
+      responses:
+        '200':
+          description: OK

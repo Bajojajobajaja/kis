@@ -1,0 +1,4 @@
+service:
+  name: sales-documents
+server:
+  port: 8080

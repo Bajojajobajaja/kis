@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: inventory-procurement API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /procurement/requests:
+    get:
+      summary: List procurement requests
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create procurement request
+      responses:
+        '201':
+          description: Created
+  /procurement/requests/{id}/status:
+    post:
+      summary: Change procurement request status
+      responses:
+        '200':
+          description: Updated
+  /procurement/policies:
+    get:
+      summary: List replenishment policies
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create or update replenishment policy
+      responses:
+        '201':
+          description: Created
+        '200':
+          description: Updated
+  /purchase-orders:
+    get:
+      summary: List purchase orders
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create purchase order
+      responses:
+        '201':
+          description: Created
+  /purchase-orders/{id}/status:
+    post:
+      summary: Change purchase order status
+      responses:
+        '200':
+          description: Updated
+  /procurement/replenishment/run:
+    post:
+      summary: Run auto replenishment by stock snapshot
+      responses:
+        '200':
+          description: Run completed
+  /events:
+    get:
+      summary: List procurement events
+      responses:
+        '200':
+          description: OK

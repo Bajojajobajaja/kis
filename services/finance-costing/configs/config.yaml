@@ -1,0 +1,4 @@
+service:
+  name: finance-costing
+server:
+  port: 8080

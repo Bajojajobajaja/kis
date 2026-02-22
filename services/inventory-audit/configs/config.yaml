@@ -1,0 +1,4 @@
+service:
+  name: inventory-audit
+server:
+  port: 8080

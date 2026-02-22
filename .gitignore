@@ -1,0 +1,35 @@
+﻿# Go
+bin/
+*.test
+*.out
+
+# Node
+node_modules/
+dist/
+
+# Env
+.env
+.env.*
+!infra/docker/.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local temp/cache
+.tmpgo/
+.gocache/
+gomodcache/
+gotmp/
+go-build*/
+services/*/.tmp/
+codex_tmp_test/
+tmp-test-write/
+.abc/

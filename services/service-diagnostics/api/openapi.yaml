@@ -1,0 +1,40 @@
+openapi: 3.0.3
+info:
+  title: service-diagnostics API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /diagnostics:
+    get:
+      summary: List diagnostics
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Save diagnostics result
+      responses:
+        '201':
+          description: Created
+  /warranty/check:
+    get:
+      summary: Check warranty status by VIN
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List diagnostic domain events
+      responses:
+        '200':
+          description: OK

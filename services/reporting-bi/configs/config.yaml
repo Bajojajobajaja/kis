@@ -1,0 +1,4 @@
+service:
+  name: reporting-bi
+server:
+  port: 8080

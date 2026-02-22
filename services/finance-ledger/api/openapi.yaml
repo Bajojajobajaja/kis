@@ -1,0 +1,58 @@
+openapi: 3.0.3
+info:
+  title: finance-ledger API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /ledger/entries:
+    get:
+      summary: List ledger entries
+      responses:
+        '200':
+          description: OK
+  /ledger/accounts:
+    get:
+      summary: List chart of accounts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create account in chart of accounts
+      responses:
+        '201':
+          description: Created
+  /ledger/post:
+    post:
+      summary: Post balanced ledger entry
+      responses:
+        '201':
+          description: Created
+  /ledger/post-from-event:
+    post:
+      summary: Post ledger entry from domain event
+      responses:
+        '201':
+          description: Created
+  /ledger/journal:
+    get:
+      summary: List immutable ledger journal records
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List ledger posting events
+      responses:
+        '200':
+          description: OK

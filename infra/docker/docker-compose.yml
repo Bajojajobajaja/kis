@@ -1,0 +1,221 @@
+name: kis-infra
+
+x-default-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  nats:
+    image: nats:2.10.21-alpine
+    command: ["-c", "/etc/nats/nats.conf"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats_data:/data
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kis_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kis} -d ${POSTGRES_DB:-platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  kong:
+    image: kong:3.8
+    profiles: ["edge"]
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /opt/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+    volumes:
+      - ./kong/kong.yml:/opt/kong/kong.yml:ro
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    profiles: ["security"]
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_local_password}
+      KC_HOSTNAME: localhost
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  vault:
+    image: hashicorp/vault:1.18
+    profiles: ["security"]
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_API_ADDR: http://127.0.0.1:8200
+    command: ["server", "-config=/vault/config/vault.hcl"]
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./vault/vault.hcl:/vault/config/vault.hcl:ro
+      - vault_data:/vault/file
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.102.0
+    profiles: ["observability"]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - tempo
+      - loki
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    profiles: ["observability"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts-kis-nexus.yml:/etc/prometheus/alerts-kis-nexus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - otel-collector
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  loki:
+    image: grafana/loki:2.9.8
+    profiles: ["observability"]
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    profiles: ["observability"]
+    command: ["-config.file=/etc/tempo.yml"]
+    ports:
+      - "3200:3200"
+      - "4319:4317"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo.yml:ro
+      - tempo_data:/tmp/tempo
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+  grafana:
+    image: grafana/grafana:10.4.5
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+    networks: [kis-net]
+    <<: *default-logging
+
+networks:
+  kis-net:
+    driver: bridge
+
+volumes:
+  nats_data:
+  postgres_data:
+  redis_data:
+  clickhouse_data:
+  vault_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:

@@ -1,0 +1,772 @@
+package httptransport
+
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+type workorder struct {
+	ID                  string    `json:"id"`
+	AppointmentID       string    `json:"appointment_id,omitempty"`
+	ClientID            string    `json:"client_id"`
+	OwnerID             string    `json:"owner_id"`
+	VehicleVIN          string    `json:"vehicle_vin"`
+	Assignee            string    `json:"assignee"`
+	Status              string    `json:"status"`
+	Deadline            string    `json:"deadline,omitempty"`
+	SLAHours            int       `json:"sla_hours"`
+	SLADeadline         string    `json:"sla_deadline"`
+	SLABreached         bool      `json:"sla_breached"`
+	RepeatVisit         bool      `json:"repeat_visit"`
+	PreviousWorkorderID string    `json:"previous_workorder_id,omitempty"`
+	QualityScore        int       `json:"quality_score,omitempty"`
+	QualityComment      string    `json:"quality_comment,omitempty"`
+	ReleasedAt          string    `json:"released_at,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+type workorderSagaStep struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Note   string `json:"note,omitempty"`
+}
+
+type workorderAuditEvent struct {
+	ID        string         `json:"id"`
+	ActorID   string         `json:"actor_id"`
+	Action    string         `json:"action"`
+	ObjectID  string         `json:"object_id"`
+	Before    map[string]any `json:"before,omitempty"`
+	After     map[string]any `json:"after,omitempty"`
+	TraceID   string         `json:"trace_id,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+type workorderAccessContext struct {
+	UserID string
+	Roles  map[string]bool
+}
+
+type workorderNotification struct {
+	ID         string    `json:"id"`
+	WorkorderID string   `json:"workorder_id"`
+	EventType  string    `json:"event_type"`
+	Channel    string    `json:"channel"`
+	Message    string    `json:"message"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+var workorderStore = struct {
+	sync.RWMutex
+	seq        int
+	workorders []workorder
+}{}
+
+var workorderNotificationStore = struct {
+	sync.RWMutex
+	seq           int
+	notifications []workorderNotification
+}{}
+
+var workorderAuditStore = struct {
+	sync.RWMutex
+	seq    int
+	events []workorderAuditEvent
+}{}
+
+func RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+	mux.HandleFunc("/workorders", workordersHandler)
+	mux.HandleFunc("/workorders/", workordersStatusHandler)
+	mux.HandleFunc("/audit/trail", workordersAuditTrailHandler)
+	mux.HandleFunc("/notifications/outbox", workordersNotificationsHandler)
+	mux.HandleFunc("/kpi/service", workordersKPIHandler)
+}
+
+func workordersHandler(w http.ResponseWriter, r *http.Request) {
+	access := readWorkorderAccessContext(r)
+
+	switch r.Method {
+	case http.MethodGet:
+		if !hasAnyWorkorderRole(access, "platform_admin", "service_manager", "service_advisor") {
+			respondError(w, http.StatusForbidden, "rbac: role is not allowed for workorders read")
+			return
+		}
+
+		workorderStore.RLock()
+		defer workorderStore.RUnlock()
+		statusFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+		overdueOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("overdue")), "true")
+		now := time.Now().UTC()
+		filteredByQuery := make([]workorder, 0, len(workorderStore.workorders))
+		for _, wo := range workorderStore.workorders {
+			if statusFilter != "" && strings.ToLower(wo.Status) != statusFilter {
+				continue
+			}
+			if overdueOnly && !isWorkorderOverdue(wo, now) {
+				continue
+			}
+			filteredByQuery = append(filteredByQuery, wo)
+		}
+
+		if hasAnyWorkorderRole(access, "platform_admin", "service_manager") {
+			respondJSON(w, http.StatusOK, filteredByQuery)
+			return
+		}
+
+		filtered := make([]workorder, 0)
+		for _, wo := range filteredByQuery {
+			if wo.OwnerID == access.UserID {
+				filtered = append(filtered, wo)
+			}
+		}
+		respondJSON(w, http.StatusOK, filtered)
+	case http.MethodPost:
+		if !hasAnyWorkorderRole(access, "platform_admin", "service_manager", "service_advisor") {
+			respondError(w, http.StatusForbidden, "rbac: role is not allowed for workorders create")
+			return
+		}
+
+		var req struct {
+			AppointmentID string `json:"appointment_id"`
+			ClientID      string `json:"client_id"`
+			OwnerID       string `json:"owner_id"`
+			VehicleVIN    string `json:"vehicle_vin"`
+			Assignee      string `json:"assignee"`
+			Deadline      string `json:"deadline"`
+			SLAHours      int    `json:"sla_hours"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if req.ClientID == "" || req.VehicleVIN == "" {
+			respondError(w, http.StatusBadRequest, "client_id and vehicle_vin are required")
+			return
+		}
+
+		ownerID := req.OwnerID
+		if ownerID == "" {
+			ownerID = access.UserID
+		}
+		if ownerID == "" {
+			respondError(w, http.StatusBadRequest, "owner_id is required (or provide X-User-ID)")
+			return
+		}
+		if hasAnyWorkorderRole(access, "service_advisor") && !hasAnyWorkorderRole(access, "platform_admin", "service_manager") && ownerID != access.UserID {
+			respondError(w, http.StatusForbidden, "rbac: service_advisor can create only own workorders")
+			return
+		}
+
+		now := time.Now().UTC()
+		slaHours := req.SLAHours
+		if slaHours <= 0 {
+			slaHours = 48
+		}
+		deadline := parseWorkorderDeadline(req.Deadline, now.Add(time.Duration(slaHours)*time.Hour))
+		repeatVisit, previousID := detectRepeatVisit(strings.ToUpper(strings.TrimSpace(req.VehicleVIN)), now)
+
+		workorderStore.Lock()
+		defer workorderStore.Unlock()
+		workorderStore.seq++
+		entity := workorder{
+			ID:                  fmt.Sprintf("wo-%05d", workorderStore.seq),
+			AppointmentID:       req.AppointmentID,
+			ClientID:            req.ClientID,
+			OwnerID:             ownerID,
+			VehicleVIN:          strings.ToUpper(strings.TrimSpace(req.VehicleVIN)),
+			Assignee:            strings.TrimSpace(req.Assignee),
+			Status:              "accepted",
+			Deadline:            deadline.Format(time.RFC3339),
+			SLAHours:            slaHours,
+			SLADeadline:         deadline.Format(time.RFC3339),
+			SLABreached:         now.After(deadline),
+			RepeatVisit:         repeatVisit,
+			PreviousWorkorderID: previousID,
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}
+		workorderStore.workorders = append(workorderStore.workorders, entity)
+		appendWorkorderAuditEvent(
+			defaultValue(access.UserID, "system"),
+			"create_workorder",
+			entity.ID,
+			nil,
+			snapshotWorkorder(entity),
+			strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+		)
+		appendWorkorderNotification(entity.ID, "WorkOrderOpened", "sms", fmt.Sprintf("Заказ-наряд %s принят в работу", entity.ID))
+		if entity.RepeatVisit {
+			appendWorkorderNotification(entity.ID, "RepeatVisitDetected", "internal", fmt.Sprintf("Повторное обращение по VIN %s (предыдущий WO: %s)", entity.VehicleVIN, entity.PreviousWorkorderID))
+		}
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func workordersStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "workorders" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+
+	workorderID := parts[1]
+	action := parts[2]
+
+	switch action {
+	case "status":
+		updateStatusHandler(w, r, workorderID)
+	case "close":
+		closeWorkorderSagaHandler(w, r, workorderID)
+	case "quality":
+		workorderQualityHandler(w, r, workorderID)
+	default:
+		respondError(w, http.StatusNotFound, "route not found")
+	}
+}
+
+func workordersAuditTrailHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	workorderAuditStore.RLock()
+	defer workorderAuditStore.RUnlock()
+	respondJSON(w, http.StatusOK, workorderAuditStore.events)
+}
+
+func workordersNotificationsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	workorderNotificationStore.RLock()
+	defer workorderNotificationStore.RUnlock()
+	respondJSON(w, http.StatusOK, workorderNotificationStore.notifications)
+}
+
+func workordersKPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	workorderStore.RLock()
+	defer workorderStore.RUnlock()
+	now := time.Now().UTC()
+	byStatus := map[string]int{}
+	overdueCount := 0
+	repeatCount := 0
+	closedCount := 0
+	closedOnTime := 0
+	qualityCount := 0
+	qualitySum := 0
+	cycleHoursTotal := 0.0
+
+	for _, entity := range workorderStore.workorders {
+		byStatus[entity.Status]++
+		if isWorkorderOverdue(entity, now) {
+			overdueCount++
+		}
+		if entity.RepeatVisit {
+			repeatCount++
+		}
+		if entity.QualityScore > 0 {
+			qualityCount++
+			qualitySum += entity.QualityScore
+		}
+		if entity.Status == "closed" {
+			closedCount++
+			if !entity.SLABreached {
+				closedOnTime++
+			}
+			cycleHoursTotal += now.Sub(entity.CreatedAt).Hours()
+		}
+	}
+
+	keys := make([]string, 0, len(byStatus))
+	for key := range byStatus {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	orderedStatus := make([]map[string]any, 0, len(keys))
+	for _, key := range keys {
+		orderedStatus = append(orderedStatus, map[string]any{
+			"status": key,
+			"count":  byStatus[key],
+		})
+	}
+
+	avgCycleHours := 0.0
+	if closedCount > 0 {
+		avgCycleHours = round2(cycleHoursTotal / float64(closedCount))
+	}
+	repeatRate := 0.0
+	if len(workorderStore.workorders) > 0 {
+		repeatRate = round2(float64(repeatCount) * 100 / float64(len(workorderStore.workorders)))
+	}
+	onTimeRate := 0.0
+	if closedCount > 0 {
+		onTimeRate = round2(float64(closedOnTime) * 100 / float64(closedCount))
+	}
+	avgQuality := 0.0
+	if qualityCount > 0 {
+		avgQuality = round2(float64(qualitySum) / float64(qualityCount))
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"generated_at":            now.Format(time.RFC3339),
+		"total_workorders":        len(workorderStore.workorders),
+		"overdue_workorders":      overdueCount,
+		"closed_workorders":       closedCount,
+		"average_cycle_hours":     avgCycleHours,
+		"repeat_visit_rate_pct":   repeatRate,
+		"on_time_close_rate_pct":  onTimeRate,
+		"average_quality_score":   avgQuality,
+		"status_breakdown":        orderedStatus,
+	})
+}
+
+func updateStatusHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Status == "" {
+		respondError(w, http.StatusBadRequest, "status is required")
+		return
+	}
+	nextStatus := strings.ToLower(strings.TrimSpace(req.Status))
+	if nextStatus == "" {
+		respondError(w, http.StatusBadRequest, "status is required")
+		return
+	}
+
+	workorderStore.Lock()
+	defer workorderStore.Unlock()
+
+	index := findWorkorderIndex(workorderID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "workorder not found")
+		return
+	}
+	if !canWriteWorkorder(readWorkorderAccessContext(r), workorderStore.workorders[index]) {
+		respondError(w, http.StatusForbidden, "rbac: endpoint/object access denied")
+		return
+	}
+
+	entity := workorderStore.workorders[index]
+	if !isAllowedWorkorderTransition(entity.Status, nextStatus) {
+		respondError(w, http.StatusConflict, "invalid status transition")
+		return
+	}
+
+	before := snapshotWorkorder(entity)
+	now := time.Now().UTC()
+	entity.Status = nextStatus
+	if nextStatus == "released" && entity.ReleasedAt == "" {
+		entity.ReleasedAt = now.Format(time.RFC3339)
+	}
+	entity.SLABreached = isWorkorderOverdue(entity, now)
+	entity.UpdatedAt = now
+	workorderStore.workorders[index] = entity
+
+	appendWorkorderAuditEvent(
+		defaultValue(readWorkorderAccessContext(r).UserID, "system"),
+		"update_status",
+		entity.ID,
+		before,
+		snapshotWorkorder(entity),
+		strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+	)
+	appendWorkorderNotification(entity.ID, "WorkorderStatusChanged", "sms", fmt.Sprintf("WO %s: статус %s", entity.ID, entity.Status))
+	if entity.Status == "ready" {
+		appendWorkorderNotification(entity.ID, "VehicleReady", "sms", fmt.Sprintf("WO %s: автомобиль готов к выдаче", entity.ID))
+	}
+	respondJSON(w, http.StatusOK, entity)
+}
+
+func closeWorkorderSagaHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
+	var req struct {
+		SimulatePartsFailure   bool `json:"simulate_parts_failure"`
+		SimulateBillingFailure bool `json:"simulate_billing_failure"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	workorderStore.Lock()
+	defer workorderStore.Unlock()
+
+	index := findWorkorderIndex(workorderID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "workorder not found")
+		return
+	}
+	if !canWriteWorkorder(readWorkorderAccessContext(r), workorderStore.workorders[index]) {
+		respondError(w, http.StatusForbidden, "rbac: endpoint/object access denied")
+		return
+	}
+
+	entity := workorderStore.workorders[index]
+	if entity.Status != "ready" && entity.Status != "released" {
+		respondError(w, http.StatusConflict, "workorder can be closed only from ready/released")
+		return
+	}
+	before := snapshotWorkorder(entity)
+	steps := make([]workorderSagaStep, 0, 4)
+	now := time.Now().UTC()
+
+	if req.SimulatePartsFailure {
+		steps = append(steps, workorderSagaStep{Name: "parts.consume", Status: "failed", Note: "stock unavailable"})
+		entity.Status = "close_failed"
+		entity.UpdatedAt = now
+		workorderStore.workorders[index] = entity
+		appendWorkorderAuditEvent(
+			defaultValue(readWorkorderAccessContext(r).UserID, "system"),
+			"close",
+			entity.ID,
+			before,
+			snapshotWorkorder(entity),
+			strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+		)
+		respondJSON(w, http.StatusOK, map[string]any{
+			"saga":      "workorder-close",
+			"result":    "failed",
+			"steps":     steps,
+			"workorder": entity,
+		})
+		return
+	}
+
+	steps = append(steps, workorderSagaStep{Name: "parts.consume", Status: "completed"})
+	if req.SimulateBillingFailure {
+		steps = append(steps, workorderSagaStep{Name: "billing.invoice", Status: "failed", Note: "billing timeout"})
+		steps = append(steps, workorderSagaStep{Name: "parts.release", Status: "completed"})
+		entity.Status = "compensated"
+		entity.UpdatedAt = now
+		workorderStore.workorders[index] = entity
+		appendWorkorderAuditEvent(
+			defaultValue(readWorkorderAccessContext(r).UserID, "system"),
+			"close",
+			entity.ID,
+			before,
+			snapshotWorkorder(entity),
+			strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+		)
+		respondJSON(w, http.StatusOK, map[string]any{
+			"saga":      "workorder-close",
+			"result":    "compensated",
+			"steps":     steps,
+			"workorder": entity,
+		})
+		return
+	}
+
+	steps = append(steps, workorderSagaStep{Name: "billing.invoice", Status: "completed"})
+	steps = append(steps, workorderSagaStep{Name: "workorder.close", Status: "completed"})
+	entity.Status = "closed"
+	if entity.ReleasedAt == "" {
+		entity.ReleasedAt = now.Format(time.RFC3339)
+	}
+	entity.SLABreached = isWorkorderOverdue(entity, now)
+	entity.UpdatedAt = now
+	workorderStore.workorders[index] = entity
+	appendWorkorderAuditEvent(
+		defaultValue(readWorkorderAccessContext(r).UserID, "system"),
+		"close",
+		entity.ID,
+		before,
+		snapshotWorkorder(entity),
+		strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+	)
+	appendWorkorderNotification(entity.ID, "WorkOrderCompleted", "sms", fmt.Sprintf("WO %s закрыт", entity.ID))
+	respondJSON(w, http.StatusOK, map[string]any{
+		"saga":      "workorder-close",
+		"result":    "completed",
+		"steps":     steps,
+		"workorder": entity,
+	})
+}
+
+func workorderQualityHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		Score   int    `json:"score"`
+		Comment string `json:"comment"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Score < 1 || req.Score > 5 {
+		respondError(w, http.StatusBadRequest, "score must be between 1 and 5")
+		return
+	}
+
+	workorderStore.Lock()
+	defer workorderStore.Unlock()
+	index := findWorkorderIndex(workorderID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "workorder not found")
+		return
+	}
+	if !canWriteWorkorder(readWorkorderAccessContext(r), workorderStore.workorders[index]) {
+		respondError(w, http.StatusForbidden, "rbac: endpoint/object access denied")
+		return
+	}
+
+	entity := workorderStore.workorders[index]
+	before := snapshotWorkorder(entity)
+	entity.QualityScore = req.Score
+	entity.QualityComment = strings.TrimSpace(req.Comment)
+	entity.UpdatedAt = time.Now().UTC()
+	workorderStore.workorders[index] = entity
+
+	appendWorkorderAuditEvent(
+		defaultValue(readWorkorderAccessContext(r).UserID, "system"),
+		"update_quality",
+		entity.ID,
+		before,
+		snapshotWorkorder(entity),
+		strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+	)
+	appendWorkorderNotification(entity.ID, "QualityFeedbackRecorded", "internal", fmt.Sprintf("WO %s: оценка качества %d/5", entity.ID, entity.QualityScore))
+	respondJSON(w, http.StatusOK, entity)
+}
+
+func canWriteWorkorder(access workorderAccessContext, entity workorder) bool {
+	if hasAnyWorkorderRole(access, "platform_admin", "service_manager") {
+		return true
+	}
+	if hasAnyWorkorderRole(access, "service_advisor") {
+		return access.UserID != "" && access.UserID == entity.OwnerID
+	}
+	return false
+}
+
+func readWorkorderAccessContext(r *http.Request) workorderAccessContext {
+	userID := strings.TrimSpace(r.Header.Get("X-User-ID"))
+	rolesRaw := r.Header.Get("X-Role")
+	if rolesRaw == "" {
+		rolesRaw = r.Header.Get("X-Roles")
+	}
+
+	roles := map[string]bool{}
+	for _, raw := range strings.Split(rolesRaw, ",") {
+		role := strings.TrimSpace(strings.ToLower(raw))
+		if role != "" {
+			roles[role] = true
+		}
+	}
+	return workorderAccessContext{
+		UserID: userID,
+		Roles:  roles,
+	}
+}
+
+func hasAnyWorkorderRole(access workorderAccessContext, allowed ...string) bool {
+	for _, role := range allowed {
+		if access.Roles[strings.ToLower(role)] {
+			return true
+		}
+	}
+	return false
+}
+
+func findWorkorderIndex(id string) int {
+	for i := range workorderStore.workorders {
+		if workorderStore.workorders[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func appendWorkorderNotification(workorderID, eventType, channel, message string) {
+	workorderNotificationStore.Lock()
+	defer workorderNotificationStore.Unlock()
+	workorderNotificationStore.seq++
+	workorderNotificationStore.notifications = append(workorderNotificationStore.notifications, workorderNotification{
+		ID:          fmt.Sprintf("won-%06d", workorderNotificationStore.seq),
+		WorkorderID: workorderID,
+		EventType:   eventType,
+		Channel:     channel,
+		Message:     message,
+		CreatedAt:   time.Now().UTC(),
+	})
+}
+
+func appendWorkorderAuditEvent(actorID, action, objectID string, before, after map[string]any, traceID string) {
+	workorderAuditStore.Lock()
+	defer workorderAuditStore.Unlock()
+	workorderAuditStore.seq++
+	workorderAuditStore.events = append(workorderAuditStore.events, workorderAuditEvent{
+		ID:        fmt.Sprintf("woa-%06d", workorderAuditStore.seq),
+		ActorID:   actorID,
+		Action:    action,
+		ObjectID:  objectID,
+		Before:    before,
+		After:     after,
+		TraceID:   traceID,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func snapshotWorkorder(entity workorder) map[string]any {
+	raw, err := json.Marshal(entity)
+	if err != nil {
+		return map[string]any{}
+	}
+
+	out := map[string]any{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func parseWorkorderDeadline(raw string, fallback time.Time) time.Time {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func isWorkorderOverdue(entity workorder, now time.Time) bool {
+	if entity.Status == "closed" || entity.Status == "released" {
+		return entity.SLABreached
+	}
+	parsed, err := time.Parse(time.RFC3339, entity.SLADeadline)
+	if err != nil {
+		return false
+	}
+	return now.After(parsed)
+}
+
+func detectRepeatVisit(vehicleVIN string, now time.Time) (bool, string) {
+	if vehicleVIN == "" {
+		return false, ""
+	}
+	workorderStore.RLock()
+	defer workorderStore.RUnlock()
+
+	var latest *workorder
+	for i := range workorderStore.workorders {
+		entity := workorderStore.workorders[i]
+		if strings.ToUpper(strings.TrimSpace(entity.VehicleVIN)) != vehicleVIN {
+			continue
+		}
+		if entity.Status != "released" && entity.Status != "closed" {
+			continue
+		}
+		updated := entity.UpdatedAt
+		if latest == nil || updated.After(latest.UpdatedAt) {
+			copy := entity
+			latest = &copy
+		}
+	}
+	if latest == nil {
+		return false, ""
+	}
+	if now.Sub(latest.UpdatedAt) <= 30*24*time.Hour {
+		return true, latest.ID
+	}
+	return false, ""
+}
+
+func isAllowedWorkorderTransition(from, to string) bool {
+	from = strings.ToLower(strings.TrimSpace(from))
+	to = strings.ToLower(strings.TrimSpace(to))
+	if from == "" || to == "" {
+		return false
+	}
+	if from == to {
+		return true
+	}
+	allowed := map[string]map[string]bool{
+		"accepted":      {"diagnostics": true, "in_progress": true, "waiting_parts": true},
+		"diagnostics":   {"in_progress": true, "waiting_parts": true},
+		"in_progress":   {"waiting_parts": true, "ready": true},
+		"waiting_parts": {"in_progress": true, "ready": true},
+		"ready":         {"released": true, "closed": true},
+		"released":      {"closed": true},
+		"close_failed":  {"in_progress": true, "waiting_parts": true},
+		"compensated":   {"in_progress": true, "ready": true},
+	}
+	return allowed[from][to]
+}
+
+func defaultValue(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func round2(value float64) float64 {
+	return math.Round(value*100) / 100
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "service-workorders",
+		"status":  "ok",
+	})
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "service-workorders",
+		"status":  "ready",
+	})
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return fmt.Errorf("invalid json: %w", err)
+	}
+	return nil
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}

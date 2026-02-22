@@ -1,0 +1,78 @@
+openapi: 3.0.3
+info:
+  title: identity-access API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /rbac/roles:
+    get:
+      summary: List roles
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create role
+      responses:
+        '201':
+          description: Created
+  /rbac/subjects:
+    get:
+      summary: List subject-role bindings
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create or update subject-role binding
+      responses:
+        '201':
+          description: Created
+        '200':
+          description: Updated
+  /rbac/subjects/{subjectID}:
+    get:
+      summary: Get subject-role binding by subject ID
+      parameters:
+        - name: subjectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+  /rbac/policies:
+    get:
+      summary: List policies
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create policy
+      responses:
+        '201':
+          description: Created
+  /rbac/check:
+    post:
+      summary: Check endpoint/object access for subject
+      responses:
+        '200':
+          description: OK
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      responses:
+        '200':
+          description: OK

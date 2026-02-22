@@ -1,0 +1,4 @@
+service:
+  name: inventory-procurement
+server:
+  port: 8080

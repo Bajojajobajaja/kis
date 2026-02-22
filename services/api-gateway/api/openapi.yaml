@@ -1,0 +1,154 @@
+openapi: 3.0.3
+info:
+  title: api-gateway API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /gateway/routes:
+    get:
+      summary: List gateway routes
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create gateway route
+      responses:
+        '201':
+          description: Created
+  /gateway/routes/{routeID}:
+    get:
+      summary: Get gateway route by ID
+      parameters:
+        - name: routeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+  /gateway/routes/{routeID}/status:
+    post:
+      summary: Change route status
+      parameters:
+        - name: routeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /gateway/dispatch:
+    post:
+      summary: Dispatch incoming request through gateway policies
+      responses:
+        '200':
+          description: OK
+  /gateway/contracts:
+    get:
+      summary: List event contracts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create event contract
+      responses:
+        '201':
+          description: Created
+  /gateway/contracts/{contractID}/status:
+    post:
+      summary: Change event contract status
+      parameters:
+        - name: contractID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /gateway/sagas:
+    get:
+      summary: List saga templates
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create saga template
+      responses:
+        '201':
+          description: Created
+  /gateway/sagas/{sagaID}/status:
+    post:
+      summary: Change saga template status
+      parameters:
+        - name: sagaID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /gateway/releases:
+    get:
+      summary: List release plans
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create release plan
+      responses:
+        '201':
+          description: Created
+  /gateway/releases/{releaseID}/status:
+    post:
+      summary: Change release plan status
+      parameters:
+        - name: releaseID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /gateway/finops:
+    get:
+      summary: Get gateway cost and load metrics
+      responses:
+        '200':
+          description: OK
+  /gateway/entity-store:
+    get:
+      summary: Get frontend entity store snapshot
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Save frontend entity store snapshot
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Invalid payload (for example duplicate VIN in crm-sales/cars)
+  /events:
+    get:
+      summary: List gateway platform events
+      responses:
+        '200':
+          description: OK

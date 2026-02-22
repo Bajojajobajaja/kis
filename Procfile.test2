@@ -1,0 +1,1 @@
+test: powershell -NoProfile -ExecutionPolicy Bypass -Command "& 'D:/KIS/scripts/dev/run-service.ps1' -Service crm-contacts -Port 19083"

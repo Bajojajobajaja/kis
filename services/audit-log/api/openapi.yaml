@@ -1,0 +1,57 @@
+openapi: 3.0.3
+info:
+  title: audit-log API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /audit/events:
+    get:
+      summary: List audit events
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create audit event with before/after snapshots
+      responses:
+        '201':
+          description: Created
+  /audit/events/critical:
+    get:
+      summary: List only critical audit events
+      responses:
+        '200':
+          description: OK
+  /audit/integrity:
+    get:
+      summary: Verify immutable hash chain integrity
+      responses:
+        '200':
+          description: OK
+  /audit/retention:
+    get:
+      summary: Get retention policy
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Update retention policy
+      responses:
+        '200':
+          description: OK
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      responses:
+        '200':
+          description: OK

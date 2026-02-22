@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: inventory-stock API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /stock:
+    get:
+      summary: List stock balances
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add stock position
+      responses:
+        '201':
+          description: Created
+  /stock/movements:
+    get:
+      summary: List stock movements
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create stock movement
+      responses:
+        '201':
+          description: Created
+  /stock/reserve:
+    post:
+      summary: Reserve stock
+      responses:
+        '200':
+          description: OK
+  /stock/release:
+    post:
+      summary: Release reserved stock
+      responses:
+        '200':
+          description: OK
+  /stock/issue:
+    post:
+      summary: Issue stock to sales or service
+      responses:
+        '200':
+          description: OK
+  /stock/replenishment/recommendations:
+    get:
+      summary: List replenishment recommendations
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List stock events
+      responses:
+        '200':
+          description: OK

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GO_BIN="go"
+if ! command -v "$GO_BIN" >/dev/null 2>&1; then
+  if command -v go.exe >/dev/null 2>&1; then
+    GO_BIN="go.exe"
+  else
+    echo "go is required for pre-push hook"
+    exit 1
+  fi
+fi
+
+echo "[pre-push] go test"
+"$GO_BIN" run ./scripts/dev/run-in-modules.go -- "$GO_BIN" test ./...
+
+echo "[pre-push] go build"
+"$GO_BIN" run ./scripts/dev/run-in-modules.go -- "$GO_BIN" build ./...

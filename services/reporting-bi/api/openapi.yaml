@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: reporting-bi API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /bi/kpis:
+    get:
+      summary: List KPI snapshots
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create KPI snapshot
+      responses:
+        '201':
+          description: Created
+  /bi/observability:
+    get:
+      summary: Get observability aggregate
+      responses:
+        '200':
+          description: OK
+  /bi/slo:
+    get:
+      summary: List SLO definitions
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create SLO definition
+      responses:
+        '201':
+          description: Created
+  /bi/slo/{sloID}/status:
+    post:
+      summary: Change SLO status
+      parameters:
+        - name: sloID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /bi/alerts:
+    get:
+      summary: List alert rules
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create alert rule
+      responses:
+        '201':
+          description: Created
+  /bi/alerts/{alertID}/trigger:
+    post:
+      summary: Trigger alert rule
+      parameters:
+        - name: alertID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /bi/backups:
+    get:
+      summary: List backup jobs
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create backup job
+      responses:
+        '201':
+          description: Created
+  /bi/backups/{backupID}/restore:
+    post:
+      summary: Restore from backup
+      parameters:
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /bi/runbooks:
+    get:
+      summary: List operational runbooks
+      responses:
+        '200':
+          description: OK
+  /bi/delivery:
+    get:
+      summary: List delivery plans
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create delivery plan
+      responses:
+        '201':
+          description: Created
+  /bi/delivery/{deliveryID}/status:
+    post:
+      summary: Change delivery plan status
+      parameters:
+        - name: deliveryID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /bi/finops:
+    get:
+      summary: Get cost and performance metrics
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List BI platform events
+      responses:
+        '200':
+          description: OK

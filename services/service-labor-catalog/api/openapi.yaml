@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: service-labor-catalog API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /labor/catalog:
+    get:
+      summary: List labor catalog items
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create labor catalog item
+      responses:
+        '201':
+          description: Created
+  /labor/catalog/{code}:
+    get:
+      summary: Get labor catalog item by code
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Update labor catalog item
+      responses:
+        '200':
+          description: OK
+  /labor/estimate:
+    post:
+      summary: Estimate labor total by work lines
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List labor catalog domain events
+      responses:
+        '200':
+          description: OK

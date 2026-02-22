@@ -1,0 +1,4 @@
+service:
+  name: crm-contacts
+server:
+  port: 8080

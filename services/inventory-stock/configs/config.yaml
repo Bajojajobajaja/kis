@@ -1,0 +1,4 @@
+service:
+  name: inventory-stock
+server:
+  port: 8080

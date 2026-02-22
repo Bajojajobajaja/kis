@@ -1,0 +1,52 @@
+openapi: 3.0.3
+info:
+  title: service-appointments API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /slots:
+    get:
+      summary: List service slots
+      responses:
+        '200':
+          description: OK
+  /calendar/load:
+    get:
+      summary: Get service bay workload by slots and reservations
+      responses:
+        '200':
+          description: OK
+  /appointments:
+    get:
+      summary: List appointments
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create appointment
+      responses:
+        '201':
+          description: Created
+  /appointments/{id}/status:
+    post:
+      summary: Update appointment status
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List service booking domain events
+      responses:
+        '200':
+          description: OK

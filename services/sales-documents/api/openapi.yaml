@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: sales-documents API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /documents/templates:
+    get:
+      summary: List document templates
+      responses:
+        '200':
+          description: OK
+  /documents:
+    get:
+      summary: List generated documents
+      responses:
+        '200':
+          description: OK
+  /documents/generate:
+    post:
+      summary: Generate sale document (contract/invoice/transfer-act/receipt)
+      responses:
+        '201':
+          description: Created
+  /events:
+    get:
+      summary: List sales document domain events
+      responses:
+        '200':
+          description: OK

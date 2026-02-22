@@ -1,0 +1,48 @@
+openapi: 3.0.3
+info:
+  title: service-parts-usage API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /workorders/{id}/parts:
+    get:
+      summary: List reserved/consumed parts for workorder
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Reserve, consume or return parts for workorder
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Stock shortage (procurement request auto-created)
+  /stock:
+    get:
+      summary: List current parts stock for service consumption
+      responses:
+        '200':
+          description: OK
+  /procurement/requests:
+    get:
+      summary: List auto-generated procurement requests due to shortages
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List parts usage domain events
+      responses:
+        '200':
+          description: OK

@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Format check
+        run: |
+          go run ./scripts/dev/run-in-modules.go -- go fmt ./...
+          if ! git diff --quiet -- '*.go'; then
+            echo "Go files are not formatted."
+            git --no-pager diff -- '*.go'
+            exit 1
+          fi
+
+      - name: Lint
+        run: go run ./scripts/dev/run-in-modules.go -- golangci-lint run ./...
+
+      - name: Test
+        run: go run ./scripts/dev/run-in-modules.go -- go test ./...
+
+      - name: Build
+        run: go run ./scripts/dev/run-in-modules.go -- go build ./...

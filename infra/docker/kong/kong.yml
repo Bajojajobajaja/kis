@@ -1,0 +1,11 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: api-gateway
+    url: http://host.docker.internal:8080
+    routes:
+      - name: api-route
+        paths:
+          - /api
+        strip_path: true

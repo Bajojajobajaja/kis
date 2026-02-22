@@ -1,0 +1,1 @@
+test: cmd /c scripts\dev\test-run.cmd foo 123

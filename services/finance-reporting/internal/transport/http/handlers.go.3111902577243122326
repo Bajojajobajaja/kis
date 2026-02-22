@@ -1,0 +1,463 @@
+package httptransport
+
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+type reportExport struct {
+	ID         string    `json:"id"`
+	Report     string    `json:"report"`
+	Format     string    `json:"format"`
+	Status     string    `json:"status"`
+	ScheduleID string    `json:"schedule_id,omitempty"`
+	PeriodFrom string    `json:"period_from,omitempty"`
+	PeriodTo   string    `json:"period_to,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type reportSchedule struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Report     string    `json:"report"`
+	Format     string    `json:"format"`
+	Cron       string    `json:"cron"`
+	IsActive   bool      `json:"is_active"`
+	LastRunAt  time.Time `json:"last_run_at,omitempty"`
+	NextRunETA string    `json:"next_run_eta,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type reportingMetric struct {
+	Domain       string    `json:"domain"`
+	Revenue      float64   `json:"revenue"`
+	Expenses     float64   `json:"expenses"`
+	Cost         float64   `json:"cost"`
+	Inflow       float64   `json:"inflow"`
+	Outflow      float64   `json:"outflow"`
+	AROpen       float64   `json:"ar_open"`
+	APOpen       float64   `json:"ap_open"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type reportingEvent struct {
+	ID        string         `json:"id"`
+	EventType string         `json:"event_type"`
+	EntityID  string         `json:"entity_id"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+var reportingStore = struct {
+	sync.RWMutex
+	exportSeq   int
+	scheduleSeq int
+	eventSeq    int
+	exports     []reportExport
+	schedules   []reportSchedule
+	metrics     map[string]reportingMetric
+	events      []reportingEvent
+}{
+	metrics: map[string]reportingMetric{
+		"sales":     {Domain: "sales", Revenue: 2340000, Expenses: 420000, Cost: 1450000, Inflow: 1760000, Outflow: 890000, AROpen: 230000, APOpen: 110000, UpdatedAt: time.Now().UTC()},
+		"service":   {Domain: "service", Revenue: 740000, Expenses: 190000, Cost: 360000, Inflow: 600000, Outflow: 320000, AROpen: 90000, APOpen: 40000, UpdatedAt: time.Now().UTC()},
+		"inventory": {Domain: "inventory", Revenue: 510000, Expenses: 150000, Cost: 320000, Inflow: 280000, Outflow: 260000, AROpen: 50000, APOpen: 180000, UpdatedAt: time.Now().UTC()},
+	},
+}
+
+func RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+	mux.HandleFunc("/reports", reportsHandler)
+	mux.HandleFunc("/reports/ingest", ingestMetricsHandler)
+	mux.HandleFunc("/reports/export", exportHandler)
+	mux.HandleFunc("/reports/exports", exportsHandler)
+	mux.HandleFunc("/reports/schedules", schedulesHandler)
+	mux.HandleFunc("/reports/schedules/", scheduleRunHandler)
+	mux.HandleFunc("/events", eventsHandler)
+}
+
+func reportsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	reportType := r.URL.Query().Get("type")
+	if reportType == "" {
+		reportType = "pnl"
+	}
+
+	reportingStore.RLock()
+	defer reportingStore.RUnlock()
+	aggregated := aggregateMetricsLocked()
+	domainBreakdown := make([]reportingMetric, 0, len(reportingStore.metrics))
+	for _, metric := range reportingStore.metrics {
+		domainBreakdown = append(domainBreakdown, metric)
+	}
+	sort.Slice(domainBreakdown, func(i, j int) bool { return domainBreakdown[i].Domain < domainBreakdown[j].Domain })
+
+	var payload map[string]any
+	switch strings.ToLower(reportType) {
+	case "cashflow":
+		payload = map[string]any{
+			"type":        "cashflow",
+			"inflow":      round2(aggregated.Inflow),
+			"outflow":     round2(aggregated.Outflow),
+			"net_result":  round2(aggregated.Inflow - aggregated.Outflow),
+			"domains":     domainBreakdown,
+		}
+	case "margin":
+		payload = map[string]any{
+			"type":          "margin",
+			"revenue":       round2(aggregated.Revenue),
+			"cost":          round2(aggregated.Cost),
+			"gross_margin":  round2(aggregated.Revenue - aggregated.Cost),
+			"margin_pct":    safePercent(aggregated.Revenue-aggregated.Cost, aggregated.Revenue),
+			"domains":       domainBreakdown,
+		}
+	case "ar-ap":
+		payload = map[string]any{
+			"type":    "ar-ap",
+			"ar_open": round2(aggregated.AROpen),
+			"ap_open": round2(aggregated.APOpen),
+			"net_ar":  round2(aggregated.AROpen - aggregated.APOpen),
+			"domains": domainBreakdown,
+		}
+	case "dashboard":
+		payload = map[string]any{
+			"type":          "dashboard",
+			"kpi_revenue":   round2(aggregated.Revenue),
+			"kpi_net_cash":  round2(aggregated.Inflow - aggregated.Outflow),
+			"kpi_margin_pct": safePercent(aggregated.Revenue-aggregated.Cost, aggregated.Revenue),
+			"kpi_ar_ap":     round2(aggregated.AROpen - aggregated.APOpen),
+			"domains":       domainBreakdown,
+		}
+	default:
+		payload = map[string]any{
+			"type":         "pnl",
+			"revenue":      round2(aggregated.Revenue),
+			"expenses":     round2(aggregated.Expenses),
+			"cost":         round2(aggregated.Cost),
+			"gross_profit": round2(aggregated.Revenue - aggregated.Cost),
+			"net_profit":   round2(aggregated.Revenue - aggregated.Expenses - aggregated.Cost),
+			"margin_pct":   safePercent(aggregated.Revenue-aggregated.Cost, aggregated.Revenue),
+			"domains":      domainBreakdown,
+		}
+	}
+
+	respondJSON(w, http.StatusOK, payload)
+}
+
+func ingestMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		Metrics []struct {
+			Domain   string  `json:"domain"`
+			Revenue  float64 `json:"revenue"`
+			Expenses float64 `json:"expenses"`
+			Cost     float64 `json:"cost"`
+			Inflow   float64 `json:"inflow"`
+			Outflow  float64 `json:"outflow"`
+			AROpen   float64 `json:"ar_open"`
+			APOpen   float64 `json:"ap_open"`
+		} `json:"metrics"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Metrics) == 0 {
+		respondError(w, http.StatusBadRequest, "metrics are required")
+		return
+	}
+	now := time.Now().UTC()
+	reportingStore.Lock()
+	defer reportingStore.Unlock()
+	for _, incoming := range req.Metrics {
+		domain := strings.ToLower(strings.TrimSpace(incoming.Domain))
+		if domain == "" {
+			continue
+		}
+		reportingStore.metrics[domain] = reportingMetric{
+			Domain:    domain,
+			Revenue:   round2(incoming.Revenue),
+			Expenses:  round2(incoming.Expenses),
+			Cost:      round2(incoming.Cost),
+			Inflow:    round2(incoming.Inflow),
+			Outflow:   round2(incoming.Outflow),
+			AROpen:    round2(incoming.AROpen),
+			APOpen:    round2(incoming.APOpen),
+			UpdatedAt: now,
+		}
+	}
+	appendReportingEvent("MetricsIngested", "metrics", map[string]any{"count": len(req.Metrics)})
+	respondJSON(w, http.StatusOK, map[string]any{"updated": len(req.Metrics)})
+}
+
+func exportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Report     string `json:"report"`
+		Format     string `json:"format"`
+		ScheduleID string `json:"schedule_id"`
+		PeriodFrom string `json:"period_from"`
+		PeriodTo   string `json:"period_to"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Report == "" {
+		respondError(w, http.StatusBadRequest, "report is required")
+		return
+	}
+
+	reportingStore.Lock()
+	defer reportingStore.Unlock()
+	reportingStore.exportSeq++
+	entity := reportExport{
+		ID:         fmt.Sprintf("re-%05d", reportingStore.exportSeq),
+		Report:     strings.ToLower(strings.TrimSpace(req.Report)),
+		Format:     strings.ToLower(defaultValue(req.Format, "xlsx")),
+		Status:     "ready",
+		ScheduleID: strings.TrimSpace(req.ScheduleID),
+		PeriodFrom: strings.TrimSpace(req.PeriodFrom),
+		PeriodTo:   strings.TrimSpace(req.PeriodTo),
+		CreatedAt:  time.Now().UTC(),
+	}
+	reportingStore.exports = append(reportingStore.exports, entity)
+	appendReportingEvent("ReportExportCreated", entity.ID, map[string]any{
+		"report": entity.Report,
+		"format": entity.Format,
+	})
+	respondJSON(w, http.StatusCreated, entity)
+}
+
+func exportsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	reportingStore.RLock()
+	defer reportingStore.RUnlock()
+	reportFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("report")))
+	out := make([]reportExport, 0, len(reportingStore.exports))
+	for _, entity := range reportingStore.exports {
+		if reportFilter != "" && strings.ToLower(entity.Report) != reportFilter {
+			continue
+		}
+		out = append(out, entity)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	respondJSON(w, http.StatusOK, out)
+}
+
+func schedulesHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		reportingStore.RLock()
+		defer reportingStore.RUnlock()
+		respondJSON(w, http.StatusOK, reportingStore.schedules)
+	case http.MethodPost:
+		var req struct {
+			Name       string `json:"name"`
+			Report     string `json:"report"`
+			Format     string `json:"format"`
+			Cron       string `json:"cron"`
+			NextRunETA string `json:"next_run_eta"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Report) == "" {
+			respondError(w, http.StatusBadRequest, "report is required")
+			return
+		}
+		now := time.Now().UTC()
+		reportingStore.Lock()
+		defer reportingStore.Unlock()
+		reportingStore.scheduleSeq++
+		entity := reportSchedule{
+			ID:         fmt.Sprintf("rs-%05d", reportingStore.scheduleSeq),
+			Name:       defaultValue(strings.TrimSpace(req.Name), fmt.Sprintf("Schedule %d", reportingStore.scheduleSeq)),
+			Report:     strings.ToLower(strings.TrimSpace(req.Report)),
+			Format:     strings.ToLower(defaultValue(strings.TrimSpace(req.Format), "xlsx")),
+			Cron:       defaultValue(strings.TrimSpace(req.Cron), "0 8 * * *"),
+			IsActive:   true,
+			NextRunETA: strings.TrimSpace(req.NextRunETA),
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		reportingStore.schedules = append(reportingStore.schedules, entity)
+		appendReportingEvent("ReportScheduleCreated", entity.ID, map[string]any{
+			"report": entity.Report,
+			"cron":   entity.Cron,
+		})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func scheduleRunHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "reports" || parts[1] != "schedules" || parts[3] != "run" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	scheduleID := parts[2]
+
+	reportingStore.Lock()
+	defer reportingStore.Unlock()
+	index := findScheduleIndexLocked(scheduleID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "schedule not found")
+		return
+	}
+	schedule := reportingStore.schedules[index]
+	if !schedule.IsActive {
+		respondError(w, http.StatusConflict, "schedule is inactive")
+		return
+	}
+
+	reportingStore.exportSeq++
+	export := reportExport{
+		ID:         fmt.Sprintf("re-%05d", reportingStore.exportSeq),
+		Report:     schedule.Report,
+		Format:     schedule.Format,
+		Status:     "ready",
+		ScheduleID: schedule.ID,
+		CreatedAt:  time.Now().UTC(),
+	}
+	reportingStore.exports = append(reportingStore.exports, export)
+	reportingStore.schedules[index].LastRunAt = time.Now().UTC()
+	reportingStore.schedules[index].UpdatedAt = time.Now().UTC()
+	appendReportingEvent("ReportScheduleRun", schedule.ID, map[string]any{"export_id": export.ID})
+	respondJSON(w, http.StatusCreated, map[string]any{"schedule": reportingStore.schedules[index], "export": export})
+}
+
+func eventsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	reportingStore.RLock()
+	defer reportingStore.RUnlock()
+	respondJSON(w, http.StatusOK, reportingStore.events)
+}
+
+func aggregateMetricsLocked() reportingMetric {
+	total := reportingMetric{Domain: "total"}
+	for _, metric := range reportingStore.metrics {
+		total.Revenue += metric.Revenue
+		total.Expenses += metric.Expenses
+		total.Cost += metric.Cost
+		total.Inflow += metric.Inflow
+		total.Outflow += metric.Outflow
+		total.AROpen += metric.AROpen
+		total.APOpen += metric.APOpen
+		if metric.UpdatedAt.After(total.UpdatedAt) {
+			total.UpdatedAt = metric.UpdatedAt
+		}
+	}
+	total.Revenue = round2(total.Revenue)
+	total.Expenses = round2(total.Expenses)
+	total.Cost = round2(total.Cost)
+	total.Inflow = round2(total.Inflow)
+	total.Outflow = round2(total.Outflow)
+	total.AROpen = round2(total.AROpen)
+	total.APOpen = round2(total.APOpen)
+	return total
+}
+
+func appendReportingEvent(eventType, entityID string, payload map[string]any) {
+	reportingStore.eventSeq++
+	reportingStore.events = append(reportingStore.events, reportingEvent{
+		ID:        fmt.Sprintf("fre-%05d", reportingStore.eventSeq),
+		EventType: eventType,
+		EntityID:  entityID,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func findScheduleIndexLocked(id string) int {
+	for i := range reportingStore.schedules {
+		if reportingStore.schedules[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func safePercent(top, base float64) float64 {
+	if base == 0 {
+		return 0
+	}
+	return round2((top / base) * 100)
+}
+
+func round2(value float64) float64 {
+	return math.Round(value*100) / 100
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "finance-reporting",
+		"status":  "ok",
+	})
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "finance-reporting",
+		"status":  "ready",
+	})
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return fmt.Errorf("invalid json: %w", err)
+	}
+	return nil
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func defaultValue(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}

@@ -1,0 +1,4 @@
+service:
+  name: service-diagnostics
+server:
+  port: 8080

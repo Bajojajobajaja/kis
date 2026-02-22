@@ -1,0 +1,114 @@
+﻿package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+	httptransport "github.com/nexus/kis/services/reporting-bi/internal/transport/http"
+)
+
+func main() {
+	dbName := defaultDBName()
+	if strings.TrimSpace(os.Getenv("DATABASE_URL")) != "" {
+		dbName = "DATABASE_URL"
+	} else {
+		dbName = envOrDefault("DB_NAME", dbName)
+	}
+
+	db, err := openPostgres(defaultDBName())
+	if err != nil {
+		log.Fatalf("failed to connect to postgres: %v", err)
+	}
+	defer db.Close()
+
+	mux := http.NewServeMux()
+	httptransport.RegisterHandlers(mux)
+
+	addr := ":" + envOrDefault("SERVER_PORT", "8080")
+	log.Printf("starting reporting-bi on %s (db=%s)", addr, dbName)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func defaultDBName() string {
+	return "reporting_bi"
+}
+
+func openPostgres(defaultName string) (*sql.DB, error) {
+	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if dsn == "" {
+		host := envOrDefault("DB_HOST", envOrDefault("POSTGRES_HOST", "localhost"))
+		port := envOrDefault("DB_PORT", envOrDefault("POSTGRES_PORT", "5432"))
+		user := envOrDefault("DB_USER", envOrDefault("POSTGRES_USER", "kis"))
+		password := envOrDefault("DB_PASSWORD", envOrDefault("POSTGRES_PASSWORD", "kis_local_password"))
+		name := envOrDefault("DB_NAME", defaultName)
+		sslMode := envOrDefault("DB_SSLMODE", "disable")
+
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=5", host, port, user, password, name, sslMode)
+	}
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open postgres: %w", err)
+	}
+
+	db.SetMaxOpenConns(intEnvOrDefault("DB_MAX_OPEN_CONNS", 10))
+	db.SetMaxIdleConns(intEnvOrDefault("DB_MAX_IDLE_CONNS", 5))
+	db.SetConnMaxLifetime(durationEnvOrDefault("DB_CONN_MAX_LIFETIME", 30*time.Minute))
+	db.SetConnMaxIdleTime(durationEnvOrDefault("DB_CONN_MAX_IDLE_TIME", 5*time.Minute))
+
+	ctx, cancel := context.WithTimeout(context.Background(), durationEnvOrDefault("DB_PING_TIMEOUT", 5*time.Second))
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("ping postgres: %w", err)
+	}
+
+	return db, nil
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func intEnvOrDefault(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func durationEnvOrDefault(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}

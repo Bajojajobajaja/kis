@@ -1,0 +1,75 @@
+openapi: 3.0.3
+info:
+  title: masterdata-catalog API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /catalog/cars:
+    get:
+      summary: List cars
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create car
+      responses:
+        '201':
+          description: Created
+  /catalog/cars/{vin}:
+    get:
+      summary: Get car by VIN
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+    put:
+      summary: Update car by VIN
+      responses:
+        '200':
+          description: Updated
+        '404':
+          description: Not found
+  /catalog/parts:
+    get:
+      summary: List parts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create part
+      responses:
+        '201':
+          description: Created
+  /catalog/parts/{code}:
+    get:
+      summary: Get part by code
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+    put:
+      summary: Update part by code
+      responses:
+        '200':
+          description: Updated
+        '404':
+          description: Not found
+  /events:
+    get:
+      summary: List catalog events
+      responses:
+        '200':
+          description: OK

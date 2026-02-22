@@ -1,0 +1,30 @@
+go 1.22
+
+use (
+    ./services/api-gateway
+    ./services/identity-access
+    ./services/audit-log
+    ./services/notification
+    ./services/reporting-bi
+    ./services/crm-contacts
+    ./services/crm-leads
+    ./services/sales-deals
+    ./services/sales-documents
+    ./services/pricing
+    ./services/service-appointments
+    ./services/service-workorders
+    ./services/service-diagnostics
+    ./services/service-labor-catalog
+    ./services/service-parts-usage
+    ./services/service-billing
+    ./services/masterdata-catalog
+    ./services/inventory-stock
+    ./services/inventory-procurement
+    ./services/inventory-receiving
+    ./services/inventory-audit
+    ./services/finance-ledger
+    ./services/finance-invoicing
+    ./services/finance-costing
+    ./services/finance-reporting
+    ./services/analytics-marts
+)

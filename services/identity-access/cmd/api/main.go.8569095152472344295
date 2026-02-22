@@ -1,0 +1,253 @@
+package main
+
+import (
+	"encoding/binary"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	httptransport "github.com/nexus/kis/services/identity-access/internal/transport/http"
+)
+
+const postgresProtocolVersion = 196608
+
+func main() {
+	dbName := defaultDBName()
+	if rawURL := strings.TrimSpace(os.Getenv("DATABASE_URL")); rawURL != "" {
+		parsedURL, err := url.Parse(rawURL)
+		if err == nil {
+			parsedDB := strings.TrimPrefix(parsedURL.Path, "/")
+			if parsedDB != "" {
+				dbName = parsedDB
+			} else {
+				dbName = "DATABASE_URL"
+			}
+		} else {
+			dbName = "DATABASE_URL"
+		}
+	} else {
+		dbName = envOrDefault("DB_NAME", dbName)
+	}
+
+	if err := checkPostgresReady(defaultDBName()); err != nil {
+		log.Fatalf("failed to connect to postgres: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	httptransport.RegisterHandlers(mux)
+
+	addr := ":" + envOrDefault("SERVER_PORT", "8080")
+	log.Printf("starting identity-access on %s (db=%s)", addr, dbName)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func defaultDBName() string {
+	return "identity_access"
+}
+
+type postgresConn struct {
+	host string
+	port string
+	user string
+	name string
+}
+
+func checkPostgresReady(defaultName string) error {
+	cfg, err := resolvePostgresConn(defaultName)
+	if err != nil {
+		return err
+	}
+
+	timeout := durationEnvOrDefault("DB_PING_TIMEOUT", 5*time.Second)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(cfg.host, cfg.port), timeout)
+	if err != nil {
+		return fmt.Errorf("dial postgres %s:%s: %w", cfg.host, cfg.port, err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if err := sendStartupPacket(conn, cfg.user, cfg.name); err != nil {
+		return err
+	}
+
+	messageType, payload, err := readPostgresMessage(conn)
+	if err != nil {
+		return err
+	}
+
+	switch messageType {
+	case 'R':
+		if len(payload) < 4 {
+			return fmt.Errorf("invalid postgres auth response")
+		}
+		authCode := binary.BigEndian.Uint32(payload[:4])
+		switch authCode {
+		case 0, 3, 5, 10, 11, 12:
+			return nil
+		default:
+			return fmt.Errorf("unsupported postgres auth code: %d", authCode)
+		}
+	case 'E':
+		return fmt.Errorf("postgres error: %s", parsePostgresError(payload))
+	default:
+		return fmt.Errorf("unexpected postgres response type: %q", messageType)
+	}
+}
+
+func resolvePostgresConn(defaultName string) (postgresConn, error) {
+	rawURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if rawURL != "" {
+		parsedURL, err := url.Parse(rawURL)
+		if err != nil {
+			return postgresConn{}, fmt.Errorf("parse DATABASE_URL: %w", err)
+		}
+
+		host := strings.TrimSpace(parsedURL.Hostname())
+		if host == "" {
+			return postgresConn{}, fmt.Errorf("DATABASE_URL must include host")
+		}
+
+		port := strings.TrimSpace(parsedURL.Port())
+		if port == "" {
+			port = "5432"
+		}
+
+		user := strings.TrimSpace(parsedURL.User.Username())
+		if user == "" {
+			user = envOrDefault("DB_USER", envOrDefault("POSTGRES_USER", "kis"))
+		}
+
+		name := strings.TrimPrefix(parsedURL.Path, "/")
+		if name == "" {
+			name = envOrDefault("DB_NAME", defaultName)
+		}
+
+		return postgresConn{host: host, port: port, user: user, name: name}, nil
+	}
+
+	host := envOrDefault("DB_HOST", envOrDefault("POSTGRES_HOST", "localhost"))
+	port := envOrDefault("DB_PORT", envOrDefault("POSTGRES_PORT", "5432"))
+	user := envOrDefault("DB_USER", envOrDefault("POSTGRES_USER", "kis"))
+	name := envOrDefault("DB_NAME", defaultName)
+	if host == "" || port == "" || user == "" || name == "" {
+		return postgresConn{}, fmt.Errorf("postgres connection settings are incomplete")
+	}
+
+	return postgresConn{host: host, port: port, user: user, name: name}, nil
+}
+
+func sendStartupPacket(conn net.Conn, user, dbName string) error {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload[:4], postgresProtocolVersion)
+
+	params := []string{"user", user, "database", dbName, "client_encoding", "UTF8"}
+	for _, item := range params {
+		payload = append(payload, item...)
+		payload = append(payload, 0)
+	}
+	payload = append(payload, 0)
+
+	packet := make([]byte, 4+len(payload))
+	binary.BigEndian.PutUint32(packet[:4], uint32(len(packet)))
+	copy(packet[4:], payload)
+
+	if _, err := conn.Write(packet); err != nil {
+		return fmt.Errorf("write postgres startup packet: %w", err)
+	}
+	return nil
+}
+
+func readPostgresMessage(conn net.Conn) (byte, []byte, error) {
+	header := make([]byte, 5)
+	if _, err := io.ReadFull(conn, header); err != nil {
+		return 0, nil, fmt.Errorf("read postgres response header: %w", err)
+	}
+
+	length := binary.BigEndian.Uint32(header[1:])
+	if length < 4 {
+		return 0, nil, fmt.Errorf("invalid postgres response length: %d", length)
+	}
+
+	payload := make([]byte, int(length)-4)
+	if _, err := io.ReadFull(conn, payload); err != nil {
+		return 0, nil, fmt.Errorf("read postgres response payload: %w", err)
+	}
+
+	return header[0], payload, nil
+}
+
+func parsePostgresError(payload []byte) string {
+	message := "unknown postgres error"
+	code := ""
+
+	for i := 0; i < len(payload) && payload[i] != 0; {
+		fieldType := payload[i]
+		i++
+		start := i
+		for i < len(payload) && payload[i] != 0 {
+			i++
+		}
+		if i >= len(payload) {
+			break
+		}
+
+		value := string(payload[start:i])
+		i++
+		switch fieldType {
+		case 'M':
+			message = value
+		case 'C':
+			code = value
+		}
+	}
+
+	if code == "" {
+		return message
+	}
+	return code + " " + message
+}
+
+func envOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func durationEnvOrDefault(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func intEnvOrDefault(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
+}

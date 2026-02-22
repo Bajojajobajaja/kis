@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: pricing API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /pricing/calc:
+    post:
+      summary: Calculate final deal price (options, discounts, promo, trade-in, commission)
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Invalid pricing input

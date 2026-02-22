@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+spec:
+  tls:
+    - hosts:
+        - api.kis.example.com
+      secretName: kis-api-gateway-tls
+  rules:
+    - host: api.kis.example.com
+

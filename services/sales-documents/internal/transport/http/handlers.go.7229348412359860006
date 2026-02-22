@@ -1,0 +1,263 @@
+﻿package httptransport
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+type template struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type document struct {
+	ID         string    `json:"id"`
+	TemplateID string    `json:"template_id"`
+	Type       string    `json:"type"`
+	DealID     string    `json:"deal_id"`
+	ClientID   string    `json:"client_id"`
+	Number     string    `json:"number"`
+	Total      float64   `json:"total"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type salesDocEvent struct {
+	ID        string         `json:"id"`
+	EventType string         `json:"event_type"`
+	Document  string         `json:"document_id"`
+	DealID    string         `json:"deal_id"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+var salesDocsStore = struct {
+	sync.RWMutex
+	seq       int
+	eventSeq  int
+	templates []template
+	documents []document
+	events    []salesDocEvent
+}{
+	templates: []template{
+		{ID: "tpl-contract", Name: "Sales Contract", Type: "contract"},
+		{ID: "tpl-invoice", Name: "Sales Invoice", Type: "invoice"},
+		{ID: "tpl-transfer", Name: "Transfer Act", Type: "transfer_act"},
+		{ID: "tpl-receipt", Name: "Payment Receipt", Type: "receipt"},
+	},
+}
+
+func RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+
+	mux.HandleFunc("/documents/templates", templatesHandler)
+	mux.HandleFunc("/documents", documentsHandler)
+	mux.HandleFunc("/documents/generate", generateDocumentHandler)
+	mux.HandleFunc("/events", documentEventsHandler)
+}
+
+func templatesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	salesDocsStore.RLock()
+	defer salesDocsStore.RUnlock()
+	respondJSON(w, http.StatusOK, salesDocsStore.templates)
+}
+
+func documentsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	salesDocsStore.RLock()
+	defer salesDocsStore.RUnlock()
+
+	dealIDFilter := strings.TrimSpace(r.URL.Query().Get("deal_id"))
+	if dealIDFilter == "" {
+		respondJSON(w, http.StatusOK, salesDocsStore.documents)
+		return
+	}
+
+	filtered := make([]document, 0)
+	for _, entity := range salesDocsStore.documents {
+		if entity.DealID == dealIDFilter {
+			filtered = append(filtered, entity)
+		}
+	}
+	respondJSON(w, http.StatusOK, filtered)
+}
+
+func generateDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		TemplateID string  `json:"template_id"`
+		DealID     string  `json:"deal_id"`
+		ClientID   string  `json:"client_id"`
+		Total      float64 `json:"total"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.TemplateID == "" || req.DealID == "" {
+		respondError(w, http.StatusBadRequest, "template_id and deal_id are required")
+		return
+	}
+	if req.Total < 0 {
+		respondError(w, http.StatusBadRequest, "total must be non-negative")
+		return
+	}
+
+	salesDocsStore.Lock()
+	defer salesDocsStore.Unlock()
+
+	tpl, ok := findTemplate(req.TemplateID)
+	if !ok {
+		respondError(w, http.StatusBadRequest, "unknown template_id")
+		return
+	}
+
+	salesDocsStore.seq++
+	entity := document{
+		ID:         fmt.Sprintf("doc-%04d", salesDocsStore.seq),
+		TemplateID: req.TemplateID,
+		Type:       tpl.Type,
+		DealID:     req.DealID,
+		ClientID:   req.ClientID,
+		Number:     nextDocumentNumber(tpl.Type, salesDocsStore.seq),
+		Total:      req.Total,
+		Status:     "issued",
+		CreatedAt:  time.Now().UTC(),
+	}
+	salesDocsStore.documents = append(salesDocsStore.documents, entity)
+	appendDocumentEvent(eventFromDocType(entity.Type), entity)
+
+	respondJSON(w, http.StatusCreated, entity)
+}
+
+func documentEventsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	salesDocsStore.RLock()
+	defer salesDocsStore.RUnlock()
+
+	eventTypeFilter := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("event_type")))
+	if eventTypeFilter == "" {
+		respondJSON(w, http.StatusOK, salesDocsStore.events)
+		return
+	}
+
+	filtered := make([]salesDocEvent, 0)
+	for _, event := range salesDocsStore.events {
+		if strings.ToLower(event.EventType) == eventTypeFilter {
+			filtered = append(filtered, event)
+		}
+	}
+	respondJSON(w, http.StatusOK, filtered)
+}
+
+func findTemplate(id string) (template, bool) {
+	for _, tpl := range salesDocsStore.templates {
+		if tpl.ID == id {
+			return tpl, true
+		}
+	}
+	return template{}, false
+}
+
+func appendDocumentEvent(eventType string, entity document) {
+	salesDocsStore.eventSeq++
+	salesDocsStore.events = append(salesDocsStore.events, salesDocEvent{
+		ID:        fmt.Sprintf("sde-%05d", salesDocsStore.eventSeq),
+		EventType: eventType,
+		Document:  entity.ID,
+		DealID:    entity.DealID,
+		Payload: map[string]any{
+			"number": entity.Number,
+			"type":   entity.Type,
+			"total":  entity.Total,
+		},
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func nextDocumentNumber(docType string, seq int) string {
+	prefix := "SD"
+	switch docType {
+	case "contract":
+		prefix = "CTR"
+	case "invoice":
+		prefix = "INV"
+	case "transfer_act":
+		prefix = "ACT"
+	case "receipt":
+		prefix = "RCP"
+	}
+	return fmt.Sprintf("%s-%06d", prefix, seq)
+}
+
+func eventFromDocType(docType string) string {
+	switch docType {
+	case "contract":
+		return "ContractIssued"
+	case "invoice":
+		return "InvoiceIssued"
+	case "transfer_act":
+		return "TransferActIssued"
+	case "receipt":
+		return "ReceiptIssued"
+	default:
+		return "DocumentIssued"
+	}
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "sales-documents",
+		"status":  "ok",
+	})
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "sales-documents",
+		"status":  "ready",
+	})
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return fmt.Errorf("invalid json: %w", err)
+	}
+	return nil
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}

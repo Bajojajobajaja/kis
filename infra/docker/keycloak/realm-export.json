@@ -1,0 +1,25 @@
+{
+  "realm": "kis",
+  "enabled": true,
+  "displayName": "KIS Nexus",
+  "roles": {
+    "realm": [
+      { "name": "director" },
+      { "name": "sales_manager" },
+      { "name": "service_manager" },
+      { "name": "warehouse_manager" },
+      { "name": "accountant" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "kis-web",
+      "name": "KIS Web SPA",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:5173/*", "http://localhost:3000/*"],
+      "webOrigins": ["*"]
+    }
+  ]
+}

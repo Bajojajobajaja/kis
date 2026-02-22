@@ -1,0 +1,4 @@
+service:
+  name: analytics-marts
+server:
+  port: 8080

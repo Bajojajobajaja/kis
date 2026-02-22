@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: inventory-audit API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /inventory-audits:
+    get:
+      summary: List inventory audit tasks
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create inventory audit task
+      responses:
+        '201':
+          description: Created
+  /inventory-audits/{id}:
+    get:
+      summary: Get inventory audit task details
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+  /inventory-audits/{id}/counts:
+    post:
+      summary: Record counted positions
+      responses:
+        '201':
+          description: Created
+  /inventory-audits/{id}/status:
+    post:
+      summary: Change inventory audit task status
+      responses:
+        '200':
+          description: Updated
+  /inventory-audits/{id}/reconcile:
+    post:
+      summary: Reconcile variances and optional auto-adjust
+      responses:
+        '200':
+          description: Reconciled
+  /inventory-audits/{id}/adjustments:
+    get:
+      summary: List adjustments by audit task
+      responses:
+        '200':
+          description: OK
+  /inventory-checks:
+    get:
+      summary: List inventory checks (compatibility endpoint)
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create inventory check (compatibility endpoint)
+      responses:
+        '201':
+          description: Created
+  /adjustments:
+    get:
+      summary: List stock adjustments
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List inventory audit events
+      responses:
+        '200':
+          description: OK

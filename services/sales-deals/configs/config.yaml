@@ -1,0 +1,4 @@
+service:
+  name: sales-deals
+server:
+  port: 8080

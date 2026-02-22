@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: notification API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /notifications/send:
+    post:
+      summary: Enqueue notification job (email/SMS)
+      responses:
+        '201':
+          description: Created
+  /notifications/jobs:
+    get:
+      summary: List notification jobs
+      responses:
+        '200':
+          description: OK
+  /notifications/dispatch:
+    post:
+      summary: Dispatch queued jobs
+      responses:
+        '200':
+          description: OK
+  /notifications/events:
+    post:
+      summary: Create notification from domain event
+      responses:
+        '201':
+          description: Created
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      responses:
+        '200':
+          description: OK

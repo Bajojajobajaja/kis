@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kis-nexus
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: kis-nexus
+
+resources:
+  - namespace.yaml
+  - platform-configmap.yaml
+  - limit-range.yaml
+  - resource-quota.yaml
+  - network-policy-default-deny.yaml
+  - api-gateway-deployment.yaml
+  - api-gateway-service.yaml
+  - api-gateway-hpa.yaml
+  - api-gateway-pdb.yaml
+  - api-gateway-ingress.yaml

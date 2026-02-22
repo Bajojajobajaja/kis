@@ -1,0 +1,4 @@
+service:
+  name: service-workorders
+server:
+  port: 8080

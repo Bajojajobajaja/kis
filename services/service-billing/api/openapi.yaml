@@ -1,0 +1,58 @@
+openapi: 3.0.3
+info:
+  title: service-billing API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /service-invoices:
+    get:
+      summary: List service invoices
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create service invoice
+      responses:
+        '201':
+          description: Created
+  /acts:
+    get:
+      summary: List completion acts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create completion act (invoice must be fully paid)
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Conflict
+  /payments:
+    get:
+      summary: List service payments
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Record payment for service invoice
+      responses:
+        '201':
+          description: Created
+  /events:
+    get:
+      summary: List billing domain events
+      responses:
+        '200':
+          description: OK

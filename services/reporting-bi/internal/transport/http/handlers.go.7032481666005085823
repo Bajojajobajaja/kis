@@ -1,0 +1,659 @@
+package httptransport
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+type kpiSnapshot struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Domain    string    `json:"domain"`
+	Value     float64   `json:"value"`
+	Unit      string    `json:"unit"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type sloDefinition struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Service        string    `json:"service"`
+	Window         string    `json:"window"`
+	TargetPct      float64   `json:"target_pct"`
+	ErrorBudgetPct float64   `json:"error_budget_pct"`
+	Status         string    `json:"status"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type alertRule struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Expression      string    `json:"expression"`
+	Severity        string    `json:"severity"`
+	Status          string    `json:"status"`
+	LastTriggeredAt time.Time `json:"last_triggered_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type backupJob struct {
+	ID         string    `json:"id"`
+	Scope      string    `json:"scope"`
+	Location   string    `json:"location"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+	RestoredAt time.Time `json:"restored_at,omitempty"`
+}
+
+type runbook struct {
+	ID      string `json:"id"`
+	Service string `json:"service"`
+	Title   string `json:"title"`
+	Link    string `json:"link"`
+}
+
+type deliveryPlan struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Environment string    `json:"environment"`
+	Strategy    string    `json:"strategy"`
+	Services    []string  `json:"services"`
+	Status      string    `json:"status"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type finopsMetric struct {
+	Service    string  `json:"service"`
+	CostUSD    float64 `json:"cost_usd"`
+	Requests   int     `json:"requests"`
+	LatencyP95 float64 `json:"latency_p95_ms"`
+	ErrorRate  float64 `json:"error_rate_pct"`
+}
+
+type biEvent struct {
+	ID        string         `json:"id"`
+	EventType string         `json:"event_type"`
+	EntityID  string         `json:"entity_id"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+var biStore = struct {
+	sync.RWMutex
+	kpiSeq      int
+	sloSeq      int
+	alertSeq    int
+	backupSeq   int
+	deliverySeq int
+	eventSeq    int
+	kpis        []kpiSnapshot
+	slos        []sloDefinition
+	alerts      []alertRule
+	backups     []backupJob
+	runbooks    []runbook
+	deliveries  []deliveryPlan
+	finops      []finopsMetric
+	events      []biEvent
+}{
+	kpiSeq:      2,
+	sloSeq:      1,
+	alertSeq:    1,
+	deliverySeq: 1,
+	kpis: []kpiSnapshot{
+		{ID: "kpi-0001", Name: "API Availability", Domain: "platform", Value: 99.93, Unit: "%", UpdatedAt: time.Now().UTC()},
+		{ID: "kpi-0002", Name: "Error Budget Remaining", Domain: "platform", Value: 82.4, Unit: "%", UpdatedAt: time.Now().UTC()},
+	},
+	slos: []sloDefinition{
+		{ID: "slo-0001", Name: "Gateway availability", Service: "api-gateway", Window: "30d", TargetPct: 99.9, ErrorBudgetPct: 0.1, Status: "healthy", UpdatedAt: time.Now().UTC()},
+	},
+	alerts: []alertRule{
+		{ID: "al-0001", Name: "Gateway error spike", Expression: "error_rate_pct > 2", Severity: "high", Status: "active", UpdatedAt: time.Now().UTC()},
+	},
+	runbooks: []runbook{
+		{ID: "rb-0001", Service: "api-gateway", Title: "Gateway outage response", Link: "docs/runbooks/gateway-outage.md"},
+		{ID: "rb-0002", Service: "notification", Title: "Notification backlog response", Link: "docs/runbooks/notification-backlog.md"},
+	},
+	deliveries: []deliveryPlan{
+		{ID: "dp-0001", Name: "platform-release-1", Environment: "stage", Strategy: "rolling", Services: []string{"api-gateway", "identity-access"}, Status: "active", UpdatedAt: time.Now().UTC()},
+	},
+	finops: []finopsMetric{
+		{Service: "api-gateway", CostUSD: 420, Requests: 125000, LatencyP95: 45, ErrorRate: 0.34},
+		{Service: "notification", CostUSD: 190, Requests: 44000, LatencyP95: 38, ErrorRate: 0.21},
+		{Service: "audit-log", CostUSD: 120, Requests: 62000, LatencyP95: 28, ErrorRate: 0.14},
+	},
+}
+
+func RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+	mux.HandleFunc("/bi/kpis", kpisHandler)
+	mux.HandleFunc("/bi/observability", observabilityHandler)
+	mux.HandleFunc("/bi/slo", sloHandler)
+	mux.HandleFunc("/bi/slo/", sloStatusHandler)
+	mux.HandleFunc("/bi/alerts", alertsHandler)
+	mux.HandleFunc("/bi/alerts/", alertTriggerHandler)
+	mux.HandleFunc("/bi/backups", backupsHandler)
+	mux.HandleFunc("/bi/backups/", backupRestoreHandler)
+	mux.HandleFunc("/bi/runbooks", runbooksHandler)
+	mux.HandleFunc("/bi/delivery", deliveryHandler)
+	mux.HandleFunc("/bi/delivery/", deliveryStatusHandler)
+	mux.HandleFunc("/bi/finops", finopsHandler)
+	mux.HandleFunc("/events", eventsHandler)
+}
+
+func kpisHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		biStore.RLock()
+		defer biStore.RUnlock()
+		respondJSON(w, http.StatusOK, biStore.kpis)
+	case http.MethodPost:
+		var req struct {
+			Name   string  `json:"name"`
+			Domain string  `json:"domain"`
+			Value  float64 `json:"value"`
+			Unit   string  `json:"unit"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" {
+			respondError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		now := time.Now().UTC()
+		biStore.Lock()
+		defer biStore.Unlock()
+		biStore.kpiSeq++
+		entity := kpiSnapshot{
+			ID:        fmt.Sprintf("kpi-%04d", biStore.kpiSeq),
+			Name:      strings.TrimSpace(req.Name),
+			Domain:    defaultValue(strings.TrimSpace(req.Domain), "platform"),
+			Value:     req.Value,
+			Unit:      defaultValue(strings.TrimSpace(req.Unit), "count"),
+			UpdatedAt: now,
+		}
+		biStore.kpis = append(biStore.kpis, entity)
+		appendBIEventLocked("BIKPIUpdated", entity.ID, map[string]any{"name": entity.Name, "value": entity.Value})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func observabilityHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	biStore.RLock()
+	defer biStore.RUnlock()
+	requests := 0
+	latencySum := 0.0
+	errorRate := 0.0
+	for _, metric := range biStore.finops {
+		requests += metric.Requests
+		latencySum += metric.LatencyP95
+		errorRate += metric.ErrorRate
+	}
+	avgLatency := 0.0
+	avgError := 0.0
+	if len(biStore.finops) > 0 {
+		avgLatency = latencySum / float64(len(biStore.finops))
+		avgError = errorRate / float64(len(biStore.finops))
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"services":              len(biStore.finops),
+		"requests_total":        requests,
+		"latency_p95_avg_ms":    round2(avgLatency),
+		"error_rate_avg_pct":    round2(avgError),
+		"trace_span_rate":       0.94,
+		"log_ingestion_per_min": requests / 60,
+	})
+}
+
+func sloHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		biStore.RLock()
+		defer biStore.RUnlock()
+		respondJSON(w, http.StatusOK, biStore.slos)
+	case http.MethodPost:
+		var req struct {
+			Name      string  `json:"name"`
+			Service   string  `json:"service"`
+			Window    string  `json:"window"`
+			TargetPct float64 `json:"target_pct"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Service) == "" {
+			respondError(w, http.StatusBadRequest, "name and service are required")
+			return
+		}
+		if req.TargetPct <= 0 || req.TargetPct > 100 {
+			respondError(w, http.StatusBadRequest, "target_pct must be in (0,100]")
+			return
+		}
+		now := time.Now().UTC()
+		biStore.Lock()
+		defer biStore.Unlock()
+		biStore.sloSeq++
+		entity := sloDefinition{
+			ID:             fmt.Sprintf("slo-%04d", biStore.sloSeq),
+			Name:           strings.TrimSpace(req.Name),
+			Service:        strings.TrimSpace(req.Service),
+			Window:         defaultValue(strings.TrimSpace(req.Window), "30d"),
+			TargetPct:      req.TargetPct,
+			ErrorBudgetPct: round2(100 - req.TargetPct),
+			Status:         "healthy",
+			UpdatedAt:      now,
+		}
+		biStore.slos = append(biStore.slos, entity)
+		appendBIEventLocked("SLOCreated", entity.ID, map[string]any{"service": entity.Service, "target_pct": entity.TargetPct})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func sloStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "bi" || parts[1] != "slo" || parts[3] != "status" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	sloID := parts[2]
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(req.Status))
+	if status != "healthy" && status != "degraded" && status != "breached" {
+		respondError(w, http.StatusBadRequest, "unsupported status")
+		return
+	}
+	biStore.Lock()
+	defer biStore.Unlock()
+	index := findSLOIndexLocked(sloID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "slo not found")
+		return
+	}
+	biStore.slos[index].Status = status
+	biStore.slos[index].UpdatedAt = time.Now().UTC()
+	appendBIEventLocked("SLOStatusChanged", sloID, map[string]any{"status": status})
+	respondJSON(w, http.StatusOK, biStore.slos[index])
+}
+
+func alertsHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		biStore.RLock()
+		defer biStore.RUnlock()
+		respondJSON(w, http.StatusOK, biStore.alerts)
+	case http.MethodPost:
+		var req struct {
+			Name       string `json:"name"`
+			Expression string `json:"expression"`
+			Severity   string `json:"severity"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Expression) == "" {
+			respondError(w, http.StatusBadRequest, "name and expression are required")
+			return
+		}
+		severity := strings.ToLower(defaultValue(strings.TrimSpace(req.Severity), "medium"))
+		if severity != "low" && severity != "medium" && severity != "high" && severity != "critical" {
+			respondError(w, http.StatusBadRequest, "unsupported severity")
+			return
+		}
+		now := time.Now().UTC()
+		biStore.Lock()
+		defer biStore.Unlock()
+		biStore.alertSeq++
+		entity := alertRule{
+			ID:        fmt.Sprintf("al-%04d", biStore.alertSeq),
+			Name:      strings.TrimSpace(req.Name),
+			Expression: strings.TrimSpace(req.Expression),
+			Severity:  severity,
+			Status:    "active",
+			UpdatedAt: now,
+		}
+		biStore.alerts = append(biStore.alerts, entity)
+		appendBIEventLocked("AlertRuleCreated", entity.ID, map[string]any{"severity": severity})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func alertTriggerHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "bi" || parts[1] != "alerts" || parts[3] != "trigger" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	alertID := parts[2]
+	biStore.Lock()
+	defer biStore.Unlock()
+	index := findAlertIndexLocked(alertID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "alert not found")
+		return
+	}
+	biStore.alerts[index].LastTriggeredAt = time.Now().UTC()
+	biStore.alerts[index].UpdatedAt = time.Now().UTC()
+	appendBIEventLocked("AlertTriggered", alertID, map[string]any{"severity": biStore.alerts[index].Severity})
+	respondJSON(w, http.StatusOK, biStore.alerts[index])
+}
+
+func backupsHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		biStore.RLock()
+		defer biStore.RUnlock()
+		respondJSON(w, http.StatusOK, biStore.backups)
+	case http.MethodPost:
+		var req struct {
+			Scope string `json:"scope"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Scope) == "" {
+			respondError(w, http.StatusBadRequest, "scope is required")
+			return
+		}
+		now := time.Now().UTC()
+		biStore.Lock()
+		defer biStore.Unlock()
+		biStore.backupSeq++
+		entity := backupJob{
+			ID:        fmt.Sprintf("bk-%04d", biStore.backupSeq),
+			Scope:     strings.TrimSpace(req.Scope),
+			Location:  fmt.Sprintf("s3://kis-backup/%s/%s", req.Scope, now.Format("20060102-150405")),
+			Status:    "ready",
+			CreatedAt: now,
+		}
+		biStore.backups = append(biStore.backups, entity)
+		appendBIEventLocked("BackupCreated", entity.ID, map[string]any{"scope": entity.Scope})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func backupRestoreHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "bi" || parts[1] != "backups" || parts[3] != "restore" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	backupID := parts[2]
+	biStore.Lock()
+	defer biStore.Unlock()
+	index := findBackupIndexLocked(backupID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "backup not found")
+		return
+	}
+	biStore.backups[index].Status = "restored"
+	biStore.backups[index].RestoredAt = time.Now().UTC()
+	appendBIEventLocked("BackupRestored", backupID, map[string]any{"scope": biStore.backups[index].Scope})
+	respondJSON(w, http.StatusOK, biStore.backups[index])
+}
+
+func runbooksHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	biStore.RLock()
+	defer biStore.RUnlock()
+	respondJSON(w, http.StatusOK, biStore.runbooks)
+}
+
+func deliveryHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		biStore.RLock()
+		defer biStore.RUnlock()
+		respondJSON(w, http.StatusOK, biStore.deliveries)
+	case http.MethodPost:
+		var req struct {
+			Name        string   `json:"name"`
+			Environment string   `json:"environment"`
+			Strategy    string   `json:"strategy"`
+			Services    []string `json:"services"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Environment) == "" {
+			respondError(w, http.StatusBadRequest, "name and environment are required")
+			return
+		}
+		now := time.Now().UTC()
+		biStore.Lock()
+		defer biStore.Unlock()
+		biStore.deliverySeq++
+		entity := deliveryPlan{
+			ID:          fmt.Sprintf("dp-%04d", biStore.deliverySeq),
+			Name:        strings.TrimSpace(req.Name),
+			Environment: strings.ToLower(strings.TrimSpace(req.Environment)),
+			Strategy:    defaultValue(strings.TrimSpace(req.Strategy), "rolling"),
+			Services:    req.Services,
+			Status:      "planned",
+			UpdatedAt:   now,
+		}
+		biStore.deliveries = append(biStore.deliveries, entity)
+		appendBIEventLocked("DeliveryPlanCreated", entity.ID, map[string]any{"environment": entity.Environment})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func deliveryStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "bi" || parts[1] != "delivery" || parts[3] != "status" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	deliveryID := parts[2]
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(req.Status))
+	if status != "planned" && status != "rolling_out" && status != "active" && status != "rolled_back" && status != "failed" {
+		respondError(w, http.StatusBadRequest, "unsupported status")
+		return
+	}
+	biStore.Lock()
+	defer biStore.Unlock()
+	index := findDeliveryIndexLocked(deliveryID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "delivery plan not found")
+		return
+	}
+	biStore.deliveries[index].Status = status
+	biStore.deliveries[index].UpdatedAt = time.Now().UTC()
+	eventType := "DeliveryStatusChanged"
+	if status == "rolled_back" {
+		eventType = "DeliveryRolledBack"
+	}
+	appendBIEventLocked(eventType, deliveryID, map[string]any{"status": status})
+	respondJSON(w, http.StatusOK, biStore.deliveries[index])
+}
+
+func finopsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	biStore.RLock()
+	defer biStore.RUnlock()
+	totalCost := 0.0
+	totalReq := 0
+	weightedLatency := 0.0
+	weightedErr := 0.0
+	for _, metric := range biStore.finops {
+		totalCost += metric.CostUSD
+		totalReq += metric.Requests
+		weightedLatency += metric.LatencyP95 * float64(metric.Requests)
+		weightedErr += metric.ErrorRate * float64(metric.Requests)
+	}
+	latency := 0.0
+	errRate := 0.0
+	if totalReq > 0 {
+		latency = weightedLatency / float64(totalReq)
+		errRate = weightedErr / float64(totalReq)
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"services":             len(biStore.finops),
+		"total_cost_usd":       round2(totalCost),
+		"requests_total":       totalReq,
+		"latency_p95_weighted": round2(latency),
+		"error_rate_weighted":  round2(errRate),
+		"details":              biStore.finops,
+	})
+}
+
+func eventsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	biStore.RLock()
+	defer biStore.RUnlock()
+	respondJSON(w, http.StatusOK, biStore.events)
+}
+
+func appendBIEventLocked(eventType, entityID string, payload map[string]any) {
+	biStore.eventSeq++
+	biStore.events = append(biStore.events, biEvent{
+		ID:        fmt.Sprintf("bie-%05d", biStore.eventSeq),
+		EventType: eventType,
+		EntityID:  entityID,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func findSLOIndexLocked(id string) int {
+	for i := range biStore.slos {
+		if biStore.slos[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func findAlertIndexLocked(id string) int {
+	for i := range biStore.alerts {
+		if biStore.alerts[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func findBackupIndexLocked(id string) int {
+	for i := range biStore.backups {
+		if biStore.backups[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func findDeliveryIndexLocked(id string) int {
+	for i := range biStore.deliveries {
+		if biStore.deliveries[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]any{
+		"service": "reporting-bi",
+		"status":  "ok",
+		"kpis":    len(biStore.kpis),
+	})
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]any{
+		"service":  "reporting-bi",
+		"status":   "ready",
+		"runbooks": len(biStore.runbooks),
+	})
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return fmt.Errorf("invalid json: %w", err)
+	}
+	return nil
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func defaultValue(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
+func round2(value float64) float64 {
+	return float64(int(value*100+0.5)) / 100
+}

@@ -1,0 +1,538 @@
+package httptransport
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+type carModel struct {
+	ID           string    `json:"id"`
+	VIN          string    `json:"vin"`
+	Brand        string    `json:"brand"`
+	Model        string    `json:"model"`
+	Year         int       `json:"year"`
+	Engine       string    `json:"engine,omitempty"`
+	Transmission string    `json:"transmission,omitempty"`
+	BodyType     string    `json:"body_type,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type partItem struct {
+	ID               string    `json:"id"`
+	Code             string    `json:"code"`
+	Name             string    `json:"name"`
+	Unit             string    `json:"unit"`
+	MinQty           int       `json:"min_qty"`
+	MaxQty           int       `json:"max_qty"`
+	ReorderPoint     int       `json:"reorder_point"`
+	LeadTimeDays     int       `json:"lead_time_days"`
+	CostPrice        float64   `json:"cost_price"`
+	RetailPrice      float64   `json:"retail_price"`
+	CompatibleModels []string  `json:"compatible_models,omitempty"`
+	SupplierCodes    []string  `json:"supplier_codes,omitempty"`
+	StorageLifeDays  int       `json:"storage_life_days,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type catalogEvent struct {
+	ID        string         `json:"id"`
+	EventType string         `json:"event_type"`
+	EntityID  string         `json:"entity_id"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+var catalogStore = struct {
+	sync.RWMutex
+	carSeq   int
+	partSeq  int
+	eventSeq int
+	cars     []carModel
+	parts    []partItem
+	events   []catalogEvent
+}{
+	cars: []carModel{
+		{
+			ID:           "car-0001",
+			VIN:          "VIN-UAT-1001",
+			Brand:        "Toyota",
+			Model:        "Camry",
+			Year:         2024,
+			Engine:       "2.5",
+			Transmission: "AT",
+			BodyType:     "sedan",
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		},
+	},
+	parts: []partItem{
+		{
+			ID:               "part-0001",
+			Code:             "PART-OIL",
+			Name:             "Engine Oil",
+			Unit:             "pcs",
+			MinQty:           5,
+			MaxQty:           30,
+			ReorderPoint:     8,
+			LeadTimeDays:     5,
+			CostPrice:        22,
+			RetailPrice:      34,
+			CompatibleModels: []string{"CAMRY", "RAV4"},
+			SupplierCodes:    []string{"SUP-A"},
+			StorageLifeDays:  730,
+			UpdatedAt:        time.Now().UTC(),
+		},
+	},
+}
+
+func RegisterHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+	mux.HandleFunc("/catalog/cars", carsHandler)
+	mux.HandleFunc("/catalog/cars/", carByVINHandler)
+	mux.HandleFunc("/catalog/parts", partsHandler)
+	mux.HandleFunc("/catalog/parts/", partByCodeHandler)
+	mux.HandleFunc("/events", catalogEventsHandler)
+}
+
+func carsHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		catalogStore.RLock()
+		defer catalogStore.RUnlock()
+		brandFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("brand")))
+		modelFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("model")))
+		vinFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("vin")))
+		yearFilterRaw := strings.TrimSpace(r.URL.Query().Get("year"))
+		yearFilter := 0
+		if yearFilterRaw != "" {
+			parsed, err := strconv.Atoi(yearFilterRaw)
+			if err == nil {
+				yearFilter = parsed
+			}
+		}
+
+		out := make([]carModel, 0, len(catalogStore.cars))
+		for _, entity := range catalogStore.cars {
+			if brandFilter != "" && strings.ToLower(entity.Brand) != brandFilter {
+				continue
+			}
+			if modelFilter != "" && strings.ToLower(entity.Model) != modelFilter {
+				continue
+			}
+			if vinFilter != "" && entity.VIN != vinFilter {
+				continue
+			}
+			if yearFilter != 0 && entity.Year != yearFilter {
+				continue
+			}
+			out = append(out, entity)
+		}
+		respondJSON(w, http.StatusOK, out)
+	case http.MethodPost:
+		var req struct {
+			VIN          string `json:"vin"`
+			Brand        string `json:"brand"`
+			Model        string `json:"model"`
+			Year         int    `json:"year"`
+			Engine       string `json:"engine"`
+			Transmission string `json:"transmission"`
+			BodyType     string `json:"body_type"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.VIN) == "" || strings.TrimSpace(req.Brand) == "" || strings.TrimSpace(req.Model) == "" {
+			respondError(w, http.StatusBadRequest, "vin, brand and model are required")
+			return
+		}
+		if req.Year != 0 && (req.Year < 1970 || req.Year > 2050) {
+			respondError(w, http.StatusBadRequest, "year is out of supported range")
+			return
+		}
+
+		catalogStore.Lock()
+		defer catalogStore.Unlock()
+		vin := strings.ToUpper(strings.TrimSpace(req.VIN))
+		if findCarIndexByVIN(vin) >= 0 {
+			respondError(w, http.StatusConflict, "car with this vin already exists")
+			return
+		}
+		catalogStore.carSeq++
+		now := time.Now().UTC()
+		entity := carModel{
+			ID:           fmt.Sprintf("car-%04d", catalogStore.carSeq),
+			VIN:          vin,
+			Brand:        strings.TrimSpace(req.Brand),
+			Model:        strings.TrimSpace(req.Model),
+			Year:         req.Year,
+			Engine:       strings.TrimSpace(req.Engine),
+			Transmission: strings.TrimSpace(req.Transmission),
+			BodyType:     strings.ToLower(strings.TrimSpace(req.BodyType)),
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		catalogStore.cars = append(catalogStore.cars, entity)
+		appendCatalogEvent("CatalogCarCreated", entity.VIN, map[string]any{
+			"brand": entity.Brand,
+			"model": entity.Model,
+		})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func carByVINHandler(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "catalog" || parts[1] != "cars" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	vin := strings.ToUpper(strings.TrimSpace(parts[2]))
+
+	switch r.Method {
+	case http.MethodGet:
+		catalogStore.RLock()
+		defer catalogStore.RUnlock()
+		index := findCarIndexByVIN(vin)
+		if index < 0 {
+			respondError(w, http.StatusNotFound, "car not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, catalogStore.cars[index])
+	case http.MethodPut:
+		var req struct {
+			Brand        string `json:"brand"`
+			Model        string `json:"model"`
+			Year         int    `json:"year"`
+			Engine       string `json:"engine"`
+			Transmission string `json:"transmission"`
+			BodyType     string `json:"body_type"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		catalogStore.Lock()
+		defer catalogStore.Unlock()
+		index := findCarIndexByVIN(vin)
+		if index < 0 {
+			respondError(w, http.StatusNotFound, "car not found")
+			return
+		}
+		entity := catalogStore.cars[index]
+		if strings.TrimSpace(req.Brand) != "" {
+			entity.Brand = strings.TrimSpace(req.Brand)
+		}
+		if strings.TrimSpace(req.Model) != "" {
+			entity.Model = strings.TrimSpace(req.Model)
+		}
+		if req.Year != 0 {
+			entity.Year = req.Year
+		}
+		if req.Engine != "" {
+			entity.Engine = strings.TrimSpace(req.Engine)
+		}
+		if req.Transmission != "" {
+			entity.Transmission = strings.TrimSpace(req.Transmission)
+		}
+		if req.BodyType != "" {
+			entity.BodyType = strings.ToLower(strings.TrimSpace(req.BodyType))
+		}
+		entity.UpdatedAt = time.Now().UTC()
+		catalogStore.cars[index] = entity
+		appendCatalogEvent("CatalogCarUpdated", entity.VIN, map[string]any{
+			"brand": entity.Brand,
+			"model": entity.Model,
+		})
+		respondJSON(w, http.StatusOK, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func partsHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		catalogStore.RLock()
+		defer catalogStore.RUnlock()
+		codeFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("code")))
+		modelFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("model")))
+		out := make([]partItem, 0, len(catalogStore.parts))
+		for _, entity := range catalogStore.parts {
+			if codeFilter != "" && entity.Code != codeFilter {
+				continue
+			}
+			if modelFilter != "" && !contains(entity.CompatibleModels, modelFilter) {
+				continue
+			}
+			out = append(out, entity)
+		}
+		respondJSON(w, http.StatusOK, out)
+	case http.MethodPost:
+		var req partItem
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
+			respondError(w, http.StatusBadRequest, "code and name are required")
+			return
+		}
+		if req.MinQty < 0 || req.MaxQty < 0 || req.ReorderPoint < 0 {
+			respondError(w, http.StatusBadRequest, "min/max/reorder must be non-negative")
+			return
+		}
+		if req.MaxQty > 0 && req.MinQty > req.MaxQty {
+			respondError(w, http.StatusBadRequest, "min_qty cannot exceed max_qty")
+			return
+		}
+
+		catalogStore.Lock()
+		defer catalogStore.Unlock()
+		code := strings.ToUpper(strings.TrimSpace(req.Code))
+		if findPartIndexByCode(code) >= 0 {
+			respondError(w, http.StatusConflict, "part with this code already exists")
+			return
+		}
+		catalogStore.partSeq++
+		entity := normalizePart(req)
+		entity.ID = fmt.Sprintf("part-%04d", catalogStore.partSeq)
+		entity.Code = code
+		entity.UpdatedAt = time.Now().UTC()
+		catalogStore.parts = append(catalogStore.parts, entity)
+		appendCatalogEvent("CatalogPartCreated", entity.Code, map[string]any{
+			"reorder_point":  entity.ReorderPoint,
+			"lead_time_days": entity.LeadTimeDays,
+		})
+		respondJSON(w, http.StatusCreated, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func partByCodeHandler(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "catalog" || parts[1] != "parts" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(parts[2]))
+
+	switch r.Method {
+	case http.MethodGet:
+		catalogStore.RLock()
+		defer catalogStore.RUnlock()
+		index := findPartIndexByCode(code)
+		if index < 0 {
+			respondError(w, http.StatusNotFound, "part not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, catalogStore.parts[index])
+	case http.MethodPut:
+		var req struct {
+			Name             string   `json:"name"`
+			Unit             string   `json:"unit"`
+			MinQty           *int     `json:"min_qty"`
+			MaxQty           *int     `json:"max_qty"`
+			ReorderPoint     *int     `json:"reorder_point"`
+			LeadTimeDays     *int     `json:"lead_time_days"`
+			CostPrice        *float64 `json:"cost_price"`
+			RetailPrice      *float64 `json:"retail_price"`
+			CompatibleModels []string `json:"compatible_models"`
+			SupplierCodes    []string `json:"supplier_codes"`
+			StorageLifeDays  *int     `json:"storage_life_days"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		catalogStore.Lock()
+		defer catalogStore.Unlock()
+		index := findPartIndexByCode(code)
+		if index < 0 {
+			respondError(w, http.StatusNotFound, "part not found")
+			return
+		}
+		entity := catalogStore.parts[index]
+		if strings.TrimSpace(req.Name) != "" {
+			entity.Name = strings.TrimSpace(req.Name)
+		}
+		if strings.TrimSpace(req.Unit) != "" {
+			entity.Unit = strings.TrimSpace(req.Unit)
+		}
+		if req.MinQty != nil {
+			entity.MinQty = *req.MinQty
+		}
+		if req.MaxQty != nil {
+			entity.MaxQty = *req.MaxQty
+		}
+		if req.ReorderPoint != nil {
+			entity.ReorderPoint = *req.ReorderPoint
+		}
+		if req.LeadTimeDays != nil {
+			entity.LeadTimeDays = *req.LeadTimeDays
+		}
+		if req.CostPrice != nil {
+			entity.CostPrice = *req.CostPrice
+		}
+		if req.RetailPrice != nil {
+			entity.RetailPrice = *req.RetailPrice
+		}
+		if req.StorageLifeDays != nil {
+			entity.StorageLifeDays = *req.StorageLifeDays
+		}
+		if req.CompatibleModels != nil {
+			entity.CompatibleModels = normalizeList(req.CompatibleModels)
+		}
+		if req.SupplierCodes != nil {
+			entity.SupplierCodes = normalizeList(req.SupplierCodes)
+		}
+		if entity.MaxQty > 0 && entity.MinQty > entity.MaxQty {
+			respondError(w, http.StatusBadRequest, "min_qty cannot exceed max_qty")
+			return
+		}
+		entity.UpdatedAt = time.Now().UTC()
+		catalogStore.parts[index] = entity
+		appendCatalogEvent("CatalogPartUpdated", entity.Code, map[string]any{
+			"reorder_point":  entity.ReorderPoint,
+			"lead_time_days": entity.LeadTimeDays,
+		})
+		respondJSON(w, http.StatusOK, entity)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func catalogEventsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	catalogStore.RLock()
+	defer catalogStore.RUnlock()
+	respondJSON(w, http.StatusOK, catalogStore.events)
+}
+
+func findCarIndexByVIN(vin string) int {
+	for i := range catalogStore.cars {
+		if catalogStore.cars[i].VIN == vin {
+			return i
+		}
+	}
+	return -1
+}
+
+func findPartIndexByCode(code string) int {
+	for i := range catalogStore.parts {
+		if catalogStore.parts[i].Code == code {
+			return i
+		}
+	}
+	return -1
+}
+
+func normalizePart(value partItem) partItem {
+	value.Unit = defaultValue(strings.TrimSpace(value.Unit), "pcs")
+	if value.ReorderPoint == 0 && value.MinQty > 0 {
+		value.ReorderPoint = value.MinQty
+	}
+	value.Code = strings.ToUpper(strings.TrimSpace(value.Code))
+	value.Name = strings.TrimSpace(value.Name)
+	value.CompatibleModels = normalizeList(value.CompatibleModels)
+	value.SupplierCodes = normalizeList(value.SupplierCodes)
+	return value
+}
+
+func normalizeList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	set := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := strings.ToUpper(strings.TrimSpace(value))
+		if normalized == "" || set[normalized] {
+			continue
+		}
+		set[normalized] = true
+		out = append(out, normalized)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func contains(values []string, value string) bool {
+	for _, item := range values {
+		if strings.EqualFold(item, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendCatalogEvent(eventType, entityID string, payload map[string]any) {
+	catalogStore.eventSeq++
+	catalogStore.events = append(catalogStore.events, catalogEvent{
+		ID:        fmt.Sprintf("mce-%05d", catalogStore.eventSeq),
+		EventType: eventType,
+		EntityID:  entityID,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "masterdata-catalog",
+		"status":  "ok",
+	})
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{
+		"service": "masterdata-catalog",
+		"status":  "ready",
+	})
+}
+
+func decodeJSON(r *http.Request, dst any) error {
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return fmt.Errorf("invalid json: %w", err)
+	}
+	return nil
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func defaultValue(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}

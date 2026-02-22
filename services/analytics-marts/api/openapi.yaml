@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: analytics-marts API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /marts/snapshots:
+    get:
+      summary: List marts snapshots
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create or update marts snapshot
+      responses:
+        '201':
+          description: Created
+        '200':
+          description: Updated
+  /marts/refresh:
+    post:
+      summary: Apply near real-time delta refresh
+      responses:
+        '200':
+          description: OK
+  /marts/kpi:
+    get:
+      summary: Get KPI dashboard snapshot
+      responses:
+        '200':
+          description: OK
+  /marts/analytics:
+    get:
+      summary: Get cross-domain analytics breakdown
+      responses:
+        '200':
+          description: OK
+  /marts/compliance/runs:
+    get:
+      summary: List compliance runs
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create compliance run
+      responses:
+        '201':
+          description: Created
+  /marts/compliance/runs/{id}/status:
+    post:
+      summary: Change compliance run status
+      responses:
+        '200':
+          description: Updated
+  /events:
+    get:
+      summary: List marts events
+      responses:
+        '200':
+          description: OK

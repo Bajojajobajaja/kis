@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: crm-leads API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /leads:
+    get:
+      summary: List leads
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create lead with intake normalization, deduplication and SLA
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Duplicate lead detected
+  /leads/{id}/qualify:
+    post:
+      summary: Qualify lead and publish LeadQualified event
+      responses:
+        '200':
+          description: OK
+  /activities:
+    get:
+      summary: List lead activities
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create lead activity
+      responses:
+        '201':
+          description: Created
+  /events:
+    get:
+      summary: List lead domain events
+      responses:
+        '200':
+          description: OK

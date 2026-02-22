@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: sales-deals API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /deals:
+    get:
+      summary: List deals
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create deal
+      responses:
+        '201':
+          description: Created
+  /deals/{id}/stages:
+    post:
+      summary: Update deal stage with transition validation
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Invalid stage transition
+  /deals/{id}/reserve-vehicle:
+    post:
+      summary: Reserve vehicle VIN for deal with reservation TTL
+      responses:
+        '200':
+          description: OK
+  /deals/{id}/payments:
+    post:
+      summary: Record sale payment for deal (Payments Bridge)
+      responses:
+        '201':
+          description: Created
+  /deals/{id}/close:
+    post:
+      summary: Close deal with saga and compensations
+      responses:
+        '200':
+          description: OK
+  /payments:
+    get:
+      summary: List sale payments
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List CRM/Sales deal domain events
+      responses:
+        '200':
+          description: OK
+  /audit/trail:
+    get:
+      summary: List deal audit events with before/after snapshots
+      responses:
+        '200':
+          description: OK

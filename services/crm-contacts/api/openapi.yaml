@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: crm-contacts API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /clients:
+    get:
+      summary: List clients
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create client
+      responses:
+        '201':
+          description: Created
+  /clients/{id}:
+    get:
+      summary: Get aggregated client card
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Update client profile, preferences and tags
+      responses:
+        '200':
+          description: OK
+  /contacts:
+    get:
+      summary: List contacts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create contact
+      responses:
+        '201':
+          description: Created
+  /interactions:
+    get:
+      summary: List interactions
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create interaction
+      responses:
+        '201':
+          description: Created

@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: inventory-receiving API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /receipts:
+    get:
+      summary: List receipts
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create receipt
+      responses:
+        '201':
+          description: Created
+  /receipts/{id}:
+    get:
+      summary: Get receipt by id
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+  /receipts/{id}/lines:
+    post:
+      summary: Register receipt lines
+      responses:
+        '200':
+          description: Updated
+  /receipts/{id}/status:
+    post:
+      summary: Change receipt status
+      responses:
+        '200':
+          description: Updated
+  /receipts/{id}/discrepancy:
+    post:
+      summary: Register discrepancy
+      responses:
+        '201':
+          description: Created
+  /warehouse/tasks:
+    get:
+      summary: List warehouse tasks
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create warehouse task
+      responses:
+        '201':
+          description: Created
+  /warehouse/tasks/{id}/status:
+    post:
+      summary: Change warehouse task status
+      responses:
+        '200':
+          description: Updated
+  /events:
+    get:
+      summary: List receiving events
+      responses:
+        '200':
+          description: OK

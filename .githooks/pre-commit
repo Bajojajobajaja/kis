@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GO_BIN="go"
+if ! command -v "$GO_BIN" >/dev/null 2>&1; then
+  if command -v go.exe >/dev/null 2>&1; then
+    GO_BIN="go.exe"
+  else
+    echo "go is required for pre-commit hook"
+    exit 1
+  fi
+fi
+
+GOLANGCI_LINT_BIN="golangci-lint"
+if ! command -v "$GOLANGCI_LINT_BIN" >/dev/null 2>&1; then
+  if command -v golangci-lint.exe >/dev/null 2>&1; then
+    GOLANGCI_LINT_BIN="golangci-lint.exe"
+  else
+    echo "golangci-lint is required. Install:"
+    echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8"
+    exit 1
+  fi
+fi
+
+echo "[pre-commit] go fmt"
+"$GO_BIN" run ./scripts/dev/run-in-modules.go -- "$GO_BIN" fmt ./...
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git diff --quiet -- '*.go'; then
+    echo "[pre-commit] Go files were reformatted. Stage changes and commit again."
+    exit 1
+  fi
+fi
+
+echo "[pre-commit] golangci-lint"
+"$GO_BIN" run ./scripts/dev/run-in-modules.go -- "$GOLANGCI_LINT_BIN" run ./...

@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: finance-costing API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /costing/calc:
+    get:
+      summary: List costing calculations
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Calculate costing
+      responses:
+        '200':
+          description: OK
+  /costing/summary:
+    get:
+      summary: Aggregated costing summary by domain
+      responses:
+        '200':
+          description: OK
+  /costing/models:
+    get:
+      summary: List costing models
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create or update costing model
+      responses:
+        '201':
+          description: Created
+        '200':
+          description: Updated
+  /events:
+    get:
+      summary: List costing events
+      responses:
+        '200':
+          description: OK

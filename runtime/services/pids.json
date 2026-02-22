@@ -1,0 +1,236 @@
+[
+    {
+        "service":  "analytics-marts",
+        "pid":  32492,
+        "port":  19080,
+        "db":  "analytics_marts",
+        "url":  "http://localhost:19080",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\analytics-marts.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\analytics-marts.err.log"
+    },
+    {
+        "service":  "api-gateway",
+        "pid":  8168,
+        "port":  19081,
+        "db":  "api_gateway",
+        "url":  "http://localhost:19081",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\api-gateway.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\api-gateway.err.log"
+    },
+    {
+        "service":  "audit-log",
+        "pid":  33400,
+        "port":  19082,
+        "db":  "audit_log",
+        "url":  "http://localhost:19082",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\audit-log.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\audit-log.err.log"
+    },
+    {
+        "service":  "crm-contacts",
+        "pid":  29512,
+        "port":  19083,
+        "db":  "crm_contacts",
+        "url":  "http://localhost:19083",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\crm-contacts.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\crm-contacts.err.log"
+    },
+    {
+        "service":  "crm-leads",
+        "pid":  28728,
+        "port":  19084,
+        "db":  "crm_leads",
+        "url":  "http://localhost:19084",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\crm-leads.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\crm-leads.err.log"
+    },
+    {
+        "service":  "finance-costing",
+        "pid":  9248,
+        "port":  19085,
+        "db":  "finance_costing",
+        "url":  "http://localhost:19085",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\finance-costing.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\finance-costing.err.log"
+    },
+    {
+        "service":  "finance-invoicing",
+        "pid":  29200,
+        "port":  19086,
+        "db":  "finance_invoicing",
+        "url":  "http://localhost:19086",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\finance-invoicing.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\finance-invoicing.err.log"
+    },
+    {
+        "service":  "finance-ledger",
+        "pid":  16208,
+        "port":  19087,
+        "db":  "finance_ledger",
+        "url":  "http://localhost:19087",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\finance-ledger.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\finance-ledger.err.log"
+    },
+    {
+        "service":  "finance-reporting",
+        "pid":  27832,
+        "port":  19088,
+        "db":  "finance_reporting",
+        "url":  "http://localhost:19088",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\finance-reporting.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\finance-reporting.err.log"
+    },
+    {
+        "service":  "identity-access",
+        "pid":  22832,
+        "port":  19089,
+        "db":  "identity_access",
+        "url":  "http://localhost:19089",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\identity-access.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\identity-access.err.log"
+    },
+    {
+        "service":  "inventory-audit",
+        "pid":  11660,
+        "port":  19090,
+        "db":  "inventory_audit",
+        "url":  "http://localhost:19090",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-audit.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-audit.err.log"
+    },
+    {
+        "service":  "inventory-procurement",
+        "pid":  19000,
+        "port":  19091,
+        "db":  "inventory_procurement",
+        "url":  "http://localhost:19091",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-procurement.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-procurement.err.log"
+    },
+    {
+        "service":  "inventory-receiving",
+        "pid":  12160,
+        "port":  19092,
+        "db":  "inventory_receiving",
+        "url":  "http://localhost:19092",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-receiving.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-receiving.err.log"
+    },
+    {
+        "service":  "inventory-stock",
+        "pid":  30892,
+        "port":  19093,
+        "db":  "inventory_stock",
+        "url":  "http://localhost:19093",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-stock.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\inventory-stock.err.log"
+    },
+    {
+        "service":  "masterdata-catalog",
+        "pid":  16776,
+        "port":  19094,
+        "db":  "masterdata_catalog",
+        "url":  "http://localhost:19094",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\masterdata-catalog.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\masterdata-catalog.err.log"
+    },
+    {
+        "service":  "notification",
+        "pid":  25852,
+        "port":  19095,
+        "db":  "notification",
+        "url":  "http://localhost:19095",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\notification.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\notification.err.log"
+    },
+    {
+        "service":  "pricing",
+        "pid":  23408,
+        "port":  19096,
+        "db":  "pricing",
+        "url":  "http://localhost:19096",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\pricing.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\pricing.err.log"
+    },
+    {
+        "service":  "reporting-bi",
+        "pid":  9988,
+        "port":  19097,
+        "db":  "reporting_bi",
+        "url":  "http://localhost:19097",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\reporting-bi.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\reporting-bi.err.log"
+    },
+    {
+        "service":  "sales-deals",
+        "pid":  31956,
+        "port":  19098,
+        "db":  "sales_deals",
+        "url":  "http://localhost:19098",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\sales-deals.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\sales-deals.err.log"
+    },
+    {
+        "service":  "sales-documents",
+        "pid":  30624,
+        "port":  19099,
+        "db":  "sales_documents",
+        "url":  "http://localhost:19099",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\sales-documents.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\sales-documents.err.log"
+    },
+    {
+        "service":  "service-appointments",
+        "pid":  31896,
+        "port":  19100,
+        "db":  "service_appointments",
+        "url":  "http://localhost:19100",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-appointments.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-appointments.err.log"
+    },
+    {
+        "service":  "service-billing",
+        "pid":  7640,
+        "port":  19101,
+        "db":  "service_billing",
+        "url":  "http://localhost:19101",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-billing.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-billing.err.log"
+    },
+    {
+        "service":  "service-diagnostics",
+        "pid":  28212,
+        "port":  19102,
+        "db":  "service_diagnostics",
+        "url":  "http://localhost:19102",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-diagnostics.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-diagnostics.err.log"
+    },
+    {
+        "service":  "service-labor-catalog",
+        "pid":  19424,
+        "port":  19103,
+        "db":  "service_labor_catalog",
+        "url":  "http://localhost:19103",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-labor-catalog.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-labor-catalog.err.log"
+    },
+    {
+        "service":  "service-parts-usage",
+        "pid":  32152,
+        "port":  19104,
+        "db":  "service_parts_usage",
+        "url":  "http://localhost:19104",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-parts-usage.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-parts-usage.err.log"
+    },
+    {
+        "service":  "service-workorders",
+        "pid":  30364,
+        "port":  19105,
+        "db":  "service_workorders",
+        "url":  "http://localhost:19105",
+        "stdout":  "E:\\goKIS\\KIS\\runtime\\services\\service-workorders.out.log",
+        "stderr":  "E:\\goKIS\\KIS\\runtime\\services\\service-workorders.err.log"
+    }
+]

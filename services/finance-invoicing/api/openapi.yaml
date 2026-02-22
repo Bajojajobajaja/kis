@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: finance-invoicing API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /readyz:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: OK
+  /invoices:
+    get:
+      summary: List invoices
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create invoice
+      responses:
+        '201':
+          description: Created
+  /invoices/{id}:
+    get:
+      summary: Get invoice by id
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not found
+  /invoices/{id}/status:
+    post:
+      summary: Change invoice status
+      responses:
+        '200':
+          description: Updated
+  /payments:
+    get:
+      summary: List payments
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Register payment
+      responses:
+        '201':
+          description: Created
+  /payments/reconcile:
+    post:
+      summary: Reconcile external payments
+      responses:
+        '200':
+          description: Reconciled
+  /ar-ap/summary:
+    get:
+      summary: AR/AP summary
+      responses:
+        '200':
+          description: OK
+  /events:
+    get:
+      summary: List invoicing events
+      responses:
+        '200':
+          description: OK
