@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   EntityCreateField,
   EntityFieldInputType,
   EntityFieldOption,
@@ -37,6 +37,8 @@ const managerOptions = options([
   'Финансовый менеджер',
 ])
 
+const segmentOptions = options(['Корпоративный', 'Розница', 'Лизинг'])
+
 const channelOptions = options(['Телефон', 'Сайт', 'Email', 'Мессенджер', 'Офис', 'Telegram'])
 const leadSourceOptions = options([
   'Реклама',
@@ -54,16 +56,16 @@ const ownerOptions = options([
   'Security Team',
   'Platform Team',
 ])
-const serviceMasterOptions = options(['Петров П.П.', 'Сидоров С.С.', 'Старший мастер'])
+export const serviceMasterOptions = options(['Петров П.П.', 'Сидоров С.С.', 'Старший мастер'])
 const warehouseOptions = options(['Основной', 'Центральный', 'Резервный'])
 const supplierOptions = options(['ООО Партс', 'ТехСнаб', 'АвтоДеталь'])
 const movementOperationOptions = options(['Приход', 'Списание', 'Перемещение', 'Возврат'])
-const paymentMethodOptions = options(['Банковский перевод', 'Карта', 'Наличные', 'Безнал'])
+export const paymentMethodOptions = options(['Банковский перевод', 'Карта', 'Наличные', 'Безнал'])
 const reportFormatOptions = options(['XLSX', 'PDF', 'CSV'])
 const departmentOptions = options(['Продажи', 'Сервис', 'Склад', 'Финансы', 'Платформа', 'Безопасность'])
 const userRoleOptions = options(['admin', 'manager', 'accountant', 'viewer'])
 const scopeOptions = options(['CRM', 'Service', 'Inventory', 'Finance', 'Platform'])
-const resourceOptions = options([
+export const resourceOptions = options([
   'finance/invoices',
   'finance/payments',
   'crm/deals',
@@ -79,6 +81,20 @@ const integrationServiceOptions = options([
 ])
 
 const fieldOverrides: Record<string, Record<string, FieldOverride>> = {
+  'crm-sales/clients': {
+    owner: {
+      inputType: 'select',
+      allowCustom: true,
+      emptyOptionLabel: 'Выберите ответственного',
+      options: managerOptions,
+    },
+    segment: {
+      inputType: 'select',
+      allowCustom: true,
+      emptyOptionLabel: 'Выберите сегмент',
+      options: segmentOptions,
+    },
+  },
   'crm-sales/deals': {
     client: {
       inputType: 'select',
@@ -457,6 +473,37 @@ function mergeOption(map: Map<string, string>, value: string, label: string) {
   map.set(normalizedValue, label.trim() || normalizedValue)
 }
 
+function formatDealVinLabel(record: EntityRecord, vin: string): string {
+  const title = (record.title ?? '').trim()
+  const year = (record.values.year ?? '').trim()
+  if (!title && !year) {
+    return vin.trim()
+  }
+  const yearPart = year ? ` (${year})` : ''
+  const left = title ? `${title}${yearPart}` : year
+  return `${left} — ${vin.trim()}`
+}
+
+function mergeDealVinOptions(
+  map: Map<string, string>,
+  source: EntityFieldOptionsSource,
+  getRecords: (storeKey: string) => EntityRecord[],
+) {
+  if (source.type !== 'store') {
+    return
+  }
+
+  const records = getRecords(source.storeKey)
+  for (const record of records) {
+    const value = extractRecordValue(record, source.valueKey)
+    if (!value) {
+      continue
+    }
+    const label = formatDealVinLabel(record, value)
+    mergeOption(map, value, label)
+  }
+}
+
 function mergeStoreOptions(
   map: Map<string, string>,
   source: EntityFieldOptionsSource,
@@ -509,7 +556,16 @@ export function resolveEntityFieldOptions({
   }
 
   if (resolvedField.optionsSource) {
-    mergeStoreOptions(optionsMap, resolvedField.optionsSource, getRecords)
+    if (
+      storeKey === 'crm-sales/deals' &&
+      field.key === 'vin' &&
+      resolvedField.optionsSource.type === 'store' &&
+      resolvedField.optionsSource.storeKey === 'crm-sales/cars'
+    ) {
+      mergeDealVinOptions(optionsMap, resolvedField.optionsSource, getRecords)
+    } else {
+      mergeStoreOptions(optionsMap, resolvedField.optionsSource, getRecords)
+    }
   }
 
   const current = (currentValue ?? '').trim()
@@ -524,3 +580,5 @@ export function resolveEntityFieldOptions({
   }
   return out
 }
+
+

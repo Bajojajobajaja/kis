@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import { Breadcrumbs, StatusBadge } from '../components'
+import { ClientQuickCreateModal } from '../components/ClientQuickCreateModal'
 import { useAuth } from '../auth/AuthContext'
 import { useEntityStore } from '../domain/EntityStoreContext'
 import {
@@ -18,6 +19,7 @@ import {
 import {
   buildStoreKey,
   type EntityCreateField,
+  type EntityRecord,
   type EntityTabDefinition,
   type SortDirection,
   type SubsystemDefinition,
@@ -45,6 +47,22 @@ function normalize(value: string): string {
 
 function normalizeVIN(value: string): string {
   return value.trim().toUpperCase()
+}
+
+function buildDealTitleFromVin(vin: string, cars: EntityRecord[]): string | null {
+  const normalized = normalizeVIN(vin)
+  if (!normalized) {
+    return null
+  }
+  const car = cars.find((item) => normalizeVIN(item.values[VIN_FIELD_KEY] ?? '') === normalized)
+  if (!car) {
+    return null
+  }
+  const title = (car.title ?? '').trim()
+  const year = (car.values.year ?? '').trim()
+  const yearPart = year ? ` (${year})` : ''
+  const left = title ? `${title}${yearPart}` : year
+  return left ? `${left} — ${normalized}` : normalized
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -134,6 +152,8 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>(initialPreferences.sortDirection)
   const [page, setPage] = useState(1)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isClientCreateOpen, setIsClientCreateOpen] = useState(false)
+  const [clientCreateVersion, setClientCreateVersion] = useState(0)
   const [createError, setCreateError] = useState('')
   const [formValues, setFormValues] = useState<Record<string, string>>(emptyFormValues)
   const [createCustomMode, setCreateCustomMode] = useState<Record<string, boolean>>({})
@@ -151,11 +171,17 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
     setCreateCustomMode({})
     setCreateError('')
     setIsCreateOpen(true)
-  }, [emptyFormValues])
+  }, [emptyFormValues, setCreateCustomMode, setCreateError, setFormValues, setIsCreateOpen])
 
   const closeCreateModal = useCallback(() => {
     setIsCreateOpen(false)
-  }, [])
+    setIsClientCreateOpen(false)
+  }, [setIsClientCreateOpen, setIsCreateOpen])
+
+  const openClientCreateModal = useCallback(() => {
+    setClientCreateVersion((prev) => prev + 1)
+    setIsClientCreateOpen(true)
+  }, [setClientCreateVersion, setIsClientCreateOpen])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -338,6 +364,7 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
   const renderCreateField = (field: EntityCreateField) => {
     const resolvedField = resolveEntityCreateField(storeKey, field)
     const value = formValues[field.key] ?? ''
+    const isDealClientField = storeKey === DEALS_STORE_KEY && field.key === 'client'
 
     if (resolvedField.inputType !== 'select') {
       return (
@@ -362,12 +389,19 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
       currentValue: value,
     })
     const hasMatchingOption = options.some((item) => item.value === value)
+    const allowInlineCustom = !isDealClientField
     const isCustom =
       resolvedField.allowCustom &&
+      allowInlineCustom &&
       (createCustomMode[field.key] || (value.trim() !== '' && !hasMatchingOption))
     const selectValue = isCustom ? CUSTOM_SELECT_OPTION_VALUE : value
 
     const handleSelectChange = (nextValue: string) => {
+      if (isDealClientField && nextValue === CUSTOM_SELECT_OPTION_VALUE) {
+        openClientCreateModal()
+        return
+      }
+
       if (nextValue === CUSTOM_SELECT_OPTION_VALUE) {
         setCreateCustomMode((prev) => ({ ...prev, [field.key]: true }))
         setFormValues((prev) => {
@@ -383,6 +417,18 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
       }
 
       setCreateCustomMode((prev) => ({ ...prev, [field.key]: false }))
+      if (storeKey === DEALS_STORE_KEY && field.key === DEAL_VIN_FIELD_KEY) {
+        setFormValues((prev) => {
+          let next = { ...prev, [field.key]: nextValue }
+          next = enrichDealValuesWithCarInfo(next, getRecords(DEAL_CARS_STORE_KEY))
+          const autoTitle = buildDealTitleFromVin(nextValue, getRecords(DEAL_CARS_STORE_KEY))
+          if (autoTitle) {
+            next.title = autoTitle
+          }
+          return next
+        })
+        return
+      }
       applyCreateFieldValue(field.key, nextValue)
     }
 
@@ -737,6 +783,17 @@ function EntityListPageContent({ subsystem, tab }: EntityListPageContentProps) {
           </div>
         </div>
       ) : null}
+
+      <ClientQuickCreateModal
+        key={clientCreateVersion}
+        isOpen={isClientCreateOpen}
+        onCancel={() => setIsClientCreateOpen(false)}
+        onCreated={(client) => {
+          setFormValues((prev) => ({ ...prev, client: client.title }))
+          setCreateCustomMode((prev) => ({ ...prev, client: false }))
+          setIsClientCreateOpen(false)
+        }}
+      />
     </>
   )
 }
