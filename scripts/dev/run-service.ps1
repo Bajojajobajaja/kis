@@ -68,6 +68,16 @@ $env:DB_PING_TIMEOUT = "5s"
 $env:KIS_DOCKER_DIR = Join-Path $repoRoot "infra\docker"
 $env:KIS_DOCKER_COMPOSE_FILE = Join-Path $env:KIS_DOCKER_DIR "docker-compose.yml"
 $env:SERVER_PORT = [string]$Port
+if ($Service -eq "finance-invoicing") {
+  $env:FINANCE_INVOICING_DEV_SEED_ENABLED = "true"
+} else {
+  Remove-Item Env:FINANCE_INVOICING_DEV_SEED_ENABLED -ErrorAction SilentlyContinue
+}
+if ($Service -eq "finance-reporting") {
+  $env:FINANCE_REPORTING_DEV_SEED_ENABLED = "true"
+} else {
+  Remove-Item Env:FINANCE_REPORTING_DEV_SEED_ENABLED -ErrorAction SilentlyContinue
+}
 $env:GOTELEMETRY = "off"
 $env:TMP = $tmpDir
 $env:TEMP = $tmpDir

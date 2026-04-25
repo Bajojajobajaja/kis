@@ -97,3 +97,27 @@ func TestAutoReplenishmentRun(t *testing.T) {
 		t.Fatalf("expected 1 created request, got %d", payload.Count)
 	}
 }
+
+func TestResetPersistedStateRestoresSeedProcurementPolicies(t *testing.T) {
+	procurementStore.Lock()
+	procurementStore.requestSeq = 0
+	procurementStore.orderSeq = 0
+	procurementStore.eventSeq = 0
+	procurementStore.policies = nil
+	procurementStore.requests = nil
+	procurementStore.orders = nil
+	procurementStore.events = nil
+	procurementStore.Unlock()
+
+	resetPersistedState()
+
+	procurementStore.RLock()
+	defer procurementStore.RUnlock()
+
+	if len(procurementStore.policies) == 0 {
+		t.Fatalf("expected seed procurement policies to be restored")
+	}
+	if procurementStore.policies[0].SKU == "" {
+		t.Fatalf("expected restored seed policy to contain SKU, got %+v", procurementStore.policies[0])
+	}
+}

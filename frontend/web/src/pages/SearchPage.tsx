@@ -1,5 +1,6 @@
-﻿import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthContext'
 import { useEntityStore } from '../domain/EntityStoreContext'
 
 function detectKind(query: string): string {
@@ -23,10 +24,15 @@ export function SearchPage() {
   const [params] = useSearchParams()
   const query = params.get('q')?.trim() ?? ''
   const kind = detectKind(query)
+  const { canAccessStore } = useAuth()
   const { getAllRecords } = useEntityStore()
 
   const results = query
-    ? getAllRecords().filter(({ record }) => {
+    ? getAllRecords().filter(({ storeKey, record }) => {
+        if (!canAccessStore(storeKey)) {
+          return false
+        }
+
         const haystack = [
           record.id,
           record.title,

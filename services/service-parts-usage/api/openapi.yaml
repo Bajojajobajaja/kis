@@ -28,6 +28,23 @@ paths:
           description: Created
         '409':
           description: Stock shortage (procurement request auto-created)
+  /workorders/{id}/parts-plan:
+    get:
+      summary: Load normalized parts plan for workorder
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Save normalized parts plan for workorder
+      responses:
+        '200':
+          description: OK
+  /workorders/{id}/writeoff:
+    post:
+      summary: Write off workorder parts or create procurement requests for shortages
+      responses:
+        '200':
+          description: OK
   /stock:
     get:
       summary: List current parts stock for service consumption

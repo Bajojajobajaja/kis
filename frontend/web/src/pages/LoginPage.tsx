@@ -1,9 +1,10 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext'
-import type { Role } from '../domain/model'
-import { roleLabels } from '../domain/rbac'
+import type { AccessRole, SubsystemSlug } from '../domain/model'
+import { accessRoleLabels, canAccessSubsystem, getDefaultPath, isAccessRole } from '../domain/rbac'
+import { getSubsystemBySlug } from '../domain/subsystems'
 
 type LoginState = {
   from?: {
@@ -12,20 +13,26 @@ type LoginState = {
 }
 
 export function LoginPage() {
-  const { signIn, isAuthenticated } = useAuth()
+  const { signIn, isAuthenticated, getLandingPath } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [selectedRole, setSelectedRole] = useState<Role>('manager')
+  const [selectedRole, setSelectedRole] = useState<AccessRole>('sales')
 
-  const from = (location.state as LoginState | null)?.from?.pathname ?? '/crm-sales'
+  const from = (location.state as LoginState | null)?.from?.pathname ?? getDefaultPath(selectedRole)
 
   if (isAuthenticated) {
-    return <Navigate to="/crm-sales" replace />
+    return <Navigate to={getLandingPath()} replace />
   }
 
   const handleSignIn = () => {
     signIn(selectedRole)
-    navigate(from, { replace: true })
+    const subsystemSlug = from.match(/^\/([^/]+)/)?.[1]
+    const subsystem = subsystemSlug ? getSubsystemBySlug(subsystemSlug) : undefined
+    const nextPath =
+      subsystem && canAccessSubsystem(selectedRole, subsystem.slug as SubsystemSlug)
+        ? from
+        : getDefaultPath(selectedRole)
+    navigate(nextPath, { replace: true })
   }
 
   return (
@@ -34,16 +41,21 @@ export function LoginPage() {
         <p className="brand__tag">KIS Nexus</p>
         <h1 className="login-card__title">Вход в корпоративную систему</h1>
         <p className="login-card__subtitle">
-          Выберите профиль доступа, чтобы проверить RBAC и скрытие действий в интерфейсе.
+          Выберите системную роль, чтобы проверить доступ к подсистемам и ограничения действий.
         </p>
 
         <label className="field">
           <span>Профиль доступа</span>
           <select
             value={selectedRole}
-            onChange={(event) => setSelectedRole(event.target.value as Role)}
+            onChange={(event) => {
+              const nextRole = event.target.value
+              if (isAccessRole(nextRole)) {
+                setSelectedRole(nextRole)
+              }
+            }}
           >
-            {Object.entries(roleLabels).map(([role, label]) => (
+            {Object.entries(accessRoleLabels).map(([role, label]) => (
               <option key={role} value={role}>
                 {label}
               </option>

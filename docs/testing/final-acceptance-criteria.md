@@ -16,7 +16,7 @@ This document finalizes acceptance criteria from `techicaldocumentation.md` sect
 
 | ID | Criterion from TZ | Evidence | Execution command | Current status |
 | --- | --- | --- | --- | --- |
-| AC-01 | Unit tests for core logic, statuses, transitions | `services/*/internal/transport/http/handlers_test.go` | `make test` | Passed |
+| AC-01 | Unit tests for core logic, statuses, transitions | `services/*/internal/transport/http/handlers_test.go`, `services/*/internal/transport/http/persistence_runtime_helpers_test.go`, `services/*/internal/transport/http/persistence_runtime_db_test.go` | `make test && make db-test && make coverage-check` | Passed |
 | AC-02 | Integration tests for sales close saga with compensation | `services/sales-deals/internal/transport/http/saga_integration_test.go` | `make integration-test` | Passed |
 | AC-03 | Integration tests for workorder close saga with compensation | `services/service-workorders/internal/transport/http/saga_integration_test.go` | `make integration-test` | Passed |
 | AC-04 | Load tests for search, write-offs, reports with 2s target | `tests/performance/k6/search.js`, `tests/performance/k6/writeoffs.js`, `tests/performance/k6/reports.js` | `make performance-test` | Ready (scripts and thresholds) |

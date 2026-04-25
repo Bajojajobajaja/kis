@@ -1,13 +1,28 @@
 import { Navigate, NavLink, Outlet, useParams } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthContext'
 import { getSubsystemBySlug } from '../domain/subsystems'
 
 export function SubsystemLayout() {
   const { subsystemSlug } = useParams()
+  const { canAccessSubsystem, getLandingPath } = useAuth()
   const subsystem = subsystemSlug ? getSubsystemBySlug(subsystemSlug) : undefined
 
   if (!subsystem) {
-    return <Navigate to="/crm-sales" replace />
+    return <Navigate to={getLandingPath()} replace />
+  }
+
+  if (!canAccessSubsystem(subsystem.slug)) {
+    return <Navigate to={getLandingPath()} replace />
+  }
+
+  const visibleTabs: Array<{ slug: string; title: string }> = subsystem.tabs.map((tab) => ({
+    slug: tab.slug,
+    title: tab.title,
+  }))
+
+  if (subsystem.slug === 'finance') {
+    visibleTabs.push({ slug: 'analytics', title: 'Аналитика' })
   }
 
   return (
@@ -19,7 +34,7 @@ export function SubsystemLayout() {
       </header>
 
       <nav className="subsystem-tabs" aria-label="secondary-navigation">
-        {subsystem.tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <NavLink
             key={tab.slug}
             to={`/${subsystem.slug}/${tab.slug}`}

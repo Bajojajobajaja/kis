@@ -1,16 +1,33 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext'
 import { subsystemNav } from '../config/navigation'
-import type { Role } from '../domain/model'
-import { roleLabels } from '../domain/rbac'
+import type { AccessRole } from '../domain/model'
+import { accessRoleLabels } from '../domain/rbac'
+import { getSubsystemBySlug } from '../domain/subsystems'
 
 export function AppLayout() {
-  const { signOut, role, setRole } = useAuth()
+  const { signOut, role, setRole, canAccessSubsystem, getLandingPath } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [query, setQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const match = location.pathname.match(/^\/([^/]+)/)
+    const subsystemSlug = match?.[1]
+    if (!subsystemSlug || subsystemSlug === 'search') {
+      return
+    }
+
+    const subsystem = getSubsystemBySlug(subsystemSlug)
+    if (!subsystem || canAccessSubsystem(subsystem.slug)) {
+      return
+    }
+
+    navigate(getLandingPath(), { replace: true })
+  }, [canAccessSubsystem, getLandingPath, location.pathname, navigate])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -44,7 +61,7 @@ export function AppLayout() {
         </div>
 
         <nav className="menu" aria-label="main-navigation">
-          {subsystemNav.map((item) => (
+          {subsystemNav.filter((item) => canAccessSubsystem(item.slug)).map((item) => (
             <NavLink
               key={item.slug}
               to={`/${item.slug}`}
@@ -79,8 +96,8 @@ export function AppLayout() {
             <p className="hotkey-hint">Ctrl+K: фокус глобального поиска</p>
             <label className="field field--inline">
               <span>Роль</span>
-              <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-                {Object.entries(roleLabels).map(([value, label]) => (
+              <select value={role} onChange={(event) => setRole(event.target.value as AccessRole)}>
+                {Object.entries(accessRoleLabels).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>

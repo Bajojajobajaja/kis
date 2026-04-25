@@ -26,6 +26,19 @@ paths:
       responses:
         '201':
           description: Created
+  /workorders/{id}:
+    get:
+      summary: Get workorder by ID
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Create or update workorder by ID
+      responses:
+        '200':
+          description: Updated
+        '201':
+          description: Created
   /workorders/{id}/status:
     post:
       summary: Update workorder status

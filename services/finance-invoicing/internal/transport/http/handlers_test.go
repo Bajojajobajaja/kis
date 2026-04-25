@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func resetFinanceInvoicingStore() {
@@ -18,6 +19,28 @@ func resetFinanceInvoicingStore() {
 	financeInvoicingStore.invoices = nil
 	financeInvoicingStore.payments = nil
 	financeInvoicingStore.events = nil
+}
+
+func TestInvoicesListIsEmptyWithoutExplicitCreate(t *testing.T) {
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/invoices", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var invoices []invoice
+	if err := json.NewDecoder(rr.Body).Decode(&invoices); err != nil {
+		t.Fatalf("decode invoices list: %v", err)
+	}
+	if len(invoices) != 0 {
+		t.Fatalf("expected 0 invoices, got %d", len(invoices))
+	}
 }
 
 func TestPaymentLifecycle(t *testing.T) {
@@ -133,4 +156,214 @@ func TestPaymentForUnknownInvoice(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", rr.Code)
 	}
+}
+
+func TestCreateInvoiceWithCreatedAtRequiresDevFlag(t *testing.T) {
+	t.Setenv(financeInvoicingDevSeedEnvKey, "false")
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/invoices",
+		strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000,"created_at":"2026-01-15T10:00:00Z"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if !strings.Contains(payload["error"], financeInvoicingDevSeedEnvKey) {
+		t.Fatalf("expected feature flag hint in error, got %q", payload["error"])
+	}
+}
+
+func TestCreateInvoiceWithNumberRequiresDevFlag(t *testing.T) {
+	t.Setenv(financeInvoicingDevSeedEnvKey, "false")
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/invoices",
+		strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000,"number":"INV-100105"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if !strings.Contains(payload["error"], financeInvoicingDevSeedEnvKey) {
+		t.Fatalf("expected feature flag hint in error, got %q", payload["error"])
+	}
+}
+
+func TestCreateInvoiceWithNumberWhenDevFlagEnabled(t *testing.T) {
+	t.Setenv(financeInvoicingDevSeedEnvKey, "true")
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/invoices",
+		strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000,"number":"INV-100105"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var created invoice
+	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
+		t.Fatalf("decode invoice response: %v", err)
+	}
+	if created.Number != "INV-100105" {
+		t.Fatalf("expected number INV-100105, got %q", created.Number)
+	}
+}
+
+func TestCreateInvoiceWithCreatedAtWhenDevFlagEnabled(t *testing.T) {
+	t.Setenv(financeInvoicingDevSeedEnvKey, "true")
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/invoices",
+		strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000,"created_at":"2026-01-15T10:00:00Z"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var created invoice
+	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
+		t.Fatalf("decode invoice response: %v", err)
+	}
+	want, err := time.Parse(time.RFC3339, "2026-01-15T10:00:00Z")
+	if err != nil {
+		t.Fatalf("parse expected time: %v", err)
+	}
+	if !created.CreatedAt.Equal(want.UTC()) {
+		t.Fatalf("expected created_at %s, got %s", want.UTC().Format(time.RFC3339), created.CreatedAt.Format(time.RFC3339))
+	}
+}
+
+func TestCreateInvoiceWithInvalidCreatedAt(t *testing.T) {
+	t.Setenv(financeInvoicingDevSeedEnvKey, "true")
+	resetFinanceInvoicingStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/invoices",
+		strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000,"created_at":"2026-01-15"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+}
+
+func TestDevResetHandler(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		t.Setenv(financeInvoicingDevSeedEnvKey, "false")
+		resetFinanceInvoicingStore()
+		mux := http.NewServeMux()
+		RegisterHandlers(mux)
+
+		req := httptest.NewRequest(http.MethodPost, "/dev/reset", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rr.Code)
+		}
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		t.Setenv(financeInvoicingDevSeedEnvKey, "true")
+		resetFinanceInvoicingStore()
+		mux := http.NewServeMux()
+		RegisterHandlers(mux)
+
+		createReq := httptest.NewRequest(http.MethodPost, "/invoices", strings.NewReader(`{"party_id":"cl-1","kind":"ar","amount":1000}`))
+		createReq.Header.Set("Content-Type", "application/json")
+		createRR := httptest.NewRecorder()
+		mux.ServeHTTP(createRR, createReq)
+		if createRR.Code != http.StatusCreated {
+			t.Fatalf("expected invoice create status 201, got %d", createRR.Code)
+		}
+
+		var created invoice
+		if err := json.NewDecoder(createRR.Body).Decode(&created); err != nil {
+			t.Fatalf("decode invoice response: %v", err)
+		}
+
+		payReq := httptest.NewRequest(http.MethodPost, "/payments", strings.NewReader(`{"invoice_id":"`+created.ID+`","amount":100}`))
+		payReq.Header.Set("Content-Type", "application/json")
+		payRR := httptest.NewRecorder()
+		mux.ServeHTTP(payRR, payReq)
+		if payRR.Code != http.StatusCreated {
+			t.Fatalf("expected payment create status 201, got %d", payRR.Code)
+		}
+
+		resetReq := httptest.NewRequest(http.MethodPost, "/dev/reset", strings.NewReader(`{}`))
+		resetReq.Header.Set("Content-Type", "application/json")
+		resetRR := httptest.NewRecorder()
+		mux.ServeHTTP(resetRR, resetReq)
+		if resetRR.Code != http.StatusOK {
+			t.Fatalf("expected reset status 200, got %d: %s", resetRR.Code, resetRR.Body.String())
+		}
+
+		listInvoicesReq := httptest.NewRequest(http.MethodGet, "/invoices", nil)
+		listInvoicesRR := httptest.NewRecorder()
+		mux.ServeHTTP(listInvoicesRR, listInvoicesReq)
+		var invoices []invoice
+		if err := json.NewDecoder(listInvoicesRR.Body).Decode(&invoices); err != nil {
+			t.Fatalf("decode invoices list: %v", err)
+		}
+		if len(invoices) != 0 {
+			t.Fatalf("expected 0 invoices after reset, got %d", len(invoices))
+		}
+
+		listPaymentsReq := httptest.NewRequest(http.MethodGet, "/payments", nil)
+		listPaymentsRR := httptest.NewRecorder()
+		mux.ServeHTTP(listPaymentsRR, listPaymentsReq)
+		var payments []payment
+		if err := json.NewDecoder(listPaymentsRR.Body).Decode(&payments); err != nil {
+			t.Fatalf("decode payments list: %v", err)
+		}
+		if len(payments) != 0 {
+			t.Fatalf("expected 0 payments after reset, got %d", len(payments))
+		}
+	})
 }

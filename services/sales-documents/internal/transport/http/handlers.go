@@ -1,6 +1,7 @@
 package httptransport
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,15 +17,21 @@ type template struct {
 }
 
 type document struct {
-	ID         string    `json:"id"`
-	TemplateID string    `json:"template_id"`
-	Type       string    `json:"type"`
-	DealID     string    `json:"deal_id"`
-	ClientID   string    `json:"client_id"`
-	Number     string    `json:"number"`
-	Total      float64   `json:"total"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	TemplateID       string    `json:"template_id"`
+	Type             string    `json:"type"`
+	DealID           string    `json:"deal_id"`
+	ClientID         string    `json:"client_id,omitempty"`
+	SourceDocumentID string    `json:"source_document_id,omitempty"`
+	Number           string    `json:"number"`
+	Total            float64   `json:"total"`
+	Status           string    `json:"status"`
+	FileName         string    `json:"file_name,omitempty"`
+	ContentType      string    `json:"content_type,omitempty"`
+	DownloadURL      string    `json:"download_url,omitempty"`
+	GeneratedAt      time.Time `json:"generated_at,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	FileDataBase64   string    `json:"-"`
 }
 
 type salesDocEvent struct {
@@ -34,6 +41,25 @@ type salesDocEvent struct {
 	DealID    string         `json:"deal_id"`
 	Payload   map[string]any `json:"payload,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
+}
+
+type generateDocumentRequest struct {
+	TemplateID       string  `json:"template_id"`
+	DealID           string  `json:"deal_id"`
+	ClientID         string  `json:"client_id"`
+	SourceDocumentID string  `json:"source_document_id"`
+	DocumentNumber   string  `json:"document_number"`
+	DocumentDate     string  `json:"document_date"`
+	Responsible      string  `json:"responsible"`
+	BuyerName        string  `json:"buyer_name"`
+	VehicleTitle     string  `json:"vehicle_title"`
+	VehicleVIN       string  `json:"vehicle_vin"`
+	VehicleBrand     string  `json:"vehicle_brand"`
+	VehicleModel     string  `json:"vehicle_model"`
+	VehicleYear      string  `json:"vehicle_year"`
+	VehicleColor     string  `json:"vehicle_color"`
+	VehiclePrice     string  `json:"vehicle_price"`
+	Total            float64 `json:"total"`
 }
 
 var salesDocsStore = struct {
@@ -57,8 +83,9 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/readyz", readyHandler)
 
 	mux.HandleFunc("/documents/templates", templatesHandler)
-	mux.HandleFunc("/documents", documentsHandler)
 	mux.HandleFunc("/documents/generate", generateDocumentHandler)
+	mux.HandleFunc("/documents/", documentByIDHandler)
+	mux.HandleFunc("/documents", documentsHandler)
 	mux.HandleFunc("/events", documentEventsHandler)
 }
 
@@ -103,12 +130,7 @@ func generateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		TemplateID string  `json:"template_id"`
-		DealID     string  `json:"deal_id"`
-		ClientID   string  `json:"client_id"`
-		Total      float64 `json:"total"`
-	}
+	var req generateDocumentRequest
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -131,22 +153,127 @@ func generateDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	salesDocsStore.seq++
-	entity := document{
-		ID:         fmt.Sprintf("doc-%04d", salesDocsStore.seq),
-		TemplateID: req.TemplateID,
-		Type:       tpl.Type,
-		DealID:     req.DealID,
-		ClientID:   req.ClientID,
-		Number:     nextDocumentNumber(tpl.Type, salesDocsStore.seq),
-		Total:      req.Total,
-		Status:     "issued",
-		CreatedAt:  time.Now().UTC(),
+	now := time.Now().UTC()
+	documentIndex := findDocumentIndexBySourceDocumentID(req.SourceDocumentID, req.TemplateID)
+	var entity document
+	if documentIndex >= 0 {
+		entity = salesDocsStore.documents[documentIndex]
+	} else {
+		salesDocsStore.seq++
+		entity = document{
+			ID:        fmt.Sprintf("doc-%04d", salesDocsStore.seq),
+			CreatedAt: now,
+		}
 	}
-	salesDocsStore.documents = append(salesDocsStore.documents, entity)
+
+	entity.TemplateID = req.TemplateID
+	entity.Type = tpl.Type
+	entity.DealID = req.DealID
+	entity.ClientID = strings.TrimSpace(req.ClientID)
+	entity.SourceDocumentID = strings.TrimSpace(req.SourceDocumentID)
+	entity.Number = resolveDocumentNumber(entity, tpl.Type, req)
+	entity.Total = req.Total
+	entity.Status = "issued"
+
+	if tpl.Type == "contract" {
+		if strings.TrimSpace(req.BuyerName) == "" {
+			respondError(w, http.StatusBadRequest, "buyer_name is required for contract pdf")
+			return
+		}
+		if strings.TrimSpace(req.VehicleTitle) == "" && strings.TrimSpace(req.VehicleVIN) == "" {
+			respondError(w, http.StatusBadRequest, "vehicle data is required for contract pdf")
+			return
+		}
+
+		pdfData, err := buildSalesContractPDF(salesContractPDFData{
+			DocumentNumber: entity.Number,
+			DocumentDate:   strings.TrimSpace(req.DocumentDate),
+			Responsible:    strings.TrimSpace(req.Responsible),
+			BuyerName:      strings.TrimSpace(req.BuyerName),
+			VehicleTitle:   strings.TrimSpace(req.VehicleTitle),
+			VehicleVIN:     strings.TrimSpace(req.VehicleVIN),
+			VehicleBrand:   strings.TrimSpace(req.VehicleBrand),
+			VehicleModel:   strings.TrimSpace(req.VehicleModel),
+			VehicleYear:    strings.TrimSpace(req.VehicleYear),
+			VehicleColor:   strings.TrimSpace(req.VehicleColor),
+			VehiclePrice:   strings.TrimSpace(req.VehiclePrice),
+			Total:          req.Total,
+		})
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		entity.FileName = buildDocumentFileName(entity.Number)
+		entity.ContentType = "application/pdf"
+		entity.DownloadURL = buildDocumentDownloadURL(entity.ID)
+		entity.GeneratedAt = now
+		entity.FileDataBase64 = base64.StdEncoding.EncodeToString(pdfData)
+	}
+
+	if documentIndex >= 0 {
+		salesDocsStore.documents[documentIndex] = entity
+	} else {
+		salesDocsStore.documents = append(salesDocsStore.documents, entity)
+	}
 	appendDocumentEvent(eventFromDocType(entity.Type), entity)
 
 	respondJSON(w, http.StatusCreated, entity)
+}
+
+func documentByIDHandler(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 3 || parts[0] != "documents" || parts[2] != "download" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	documentID := strings.TrimSpace(parts[1])
+	if documentID == "" {
+		respondError(w, http.StatusBadRequest, "document id is required")
+		return
+	}
+
+	salesDocsStore.RLock()
+	index := findDocumentIndexLocked(documentID)
+	if index < 0 {
+		salesDocsStore.RUnlock()
+		respondError(w, http.StatusNotFound, "document not found")
+		return
+	}
+	entity := salesDocsStore.documents[index]
+	salesDocsStore.RUnlock()
+
+	if strings.TrimSpace(entity.FileDataBase64) == "" {
+		respondError(w, http.StatusNotFound, "document file is not available")
+		return
+	}
+
+	payload, err := base64.StdEncoding.DecodeString(strings.TrimSpace(entity.FileDataBase64))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "document payload is corrupted")
+		return
+	}
+
+	contentType := strings.TrimSpace(entity.ContentType)
+	if contentType == "" {
+		contentType = "application/pdf"
+	}
+	fileName := strings.TrimSpace(entity.FileName)
+	if fileName == "" {
+		fileName = buildDocumentFileName(entity.Number)
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(payload)
 }
 
 func documentEventsHandler(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +309,51 @@ func findTemplate(id string) (template, bool) {
 	return template{}, false
 }
 
+func findDocumentIndexBySourceDocumentID(sourceDocumentID, templateID string) int {
+	if strings.TrimSpace(sourceDocumentID) == "" {
+		return -1
+	}
+	for index, entity := range salesDocsStore.documents {
+		if entity.SourceDocumentID == sourceDocumentID && entity.TemplateID == templateID {
+			return index
+		}
+	}
+	return -1
+}
+
+func findDocumentIndexLocked(documentID string) int {
+	for index, entity := range salesDocsStore.documents {
+		if entity.ID == documentID {
+			return index
+		}
+	}
+	return -1
+}
+
+func resolveDocumentNumber(entity document, docType string, req generateDocumentRequest) string {
+	documentNumber := strings.TrimSpace(req.DocumentNumber)
+	if documentNumber != "" {
+		return documentNumber
+	}
+	if strings.TrimSpace(entity.Number) != "" {
+		return entity.Number
+	}
+	return nextDocumentNumber(docType, salesDocsStore.seq)
+}
+
+func buildDocumentDownloadURL(documentID string) string {
+	return fmt.Sprintf("/documents/%s/download", documentID)
+}
+
+func buildDocumentFileName(number string) string {
+	sanitized := strings.TrimSpace(number)
+	if sanitized == "" {
+		sanitized = "sales-contract"
+	}
+	replacer := strings.NewReplacer(" ", "-", "/", "-", "\\", "-", ":", "-", "\"", "")
+	return fmt.Sprintf("%s.pdf", replacer.Replace(sanitized))
+}
+
 func appendDocumentEvent(eventType string, entity document) {
 	salesDocsStore.eventSeq++
 	salesDocsStore.events = append(salesDocsStore.events, salesDocEvent{
@@ -190,9 +362,11 @@ func appendDocumentEvent(eventType string, entity document) {
 		Document:  entity.ID,
 		DealID:    entity.DealID,
 		Payload: map[string]any{
-			"number": entity.Number,
-			"type":   entity.Type,
-			"total":  entity.Total,
+			"number":             entity.Number,
+			"type":               entity.Type,
+			"total":              entity.Total,
+			"source_document_id": entity.SourceDocumentID,
+			"file_name":          entity.FileName,
 		},
 		CreatedAt: time.Now().UTC(),
 	})

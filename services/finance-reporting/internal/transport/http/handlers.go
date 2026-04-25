@@ -5,21 +5,33 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
+const financeReportingDevSeedEnvKey = "FINANCE_REPORTING_DEV_SEED_ENABLED"
+
 type reportExport struct {
-	ID         string    `json:"id"`
-	Report     string    `json:"report"`
-	Format     string    `json:"format"`
-	Status     string    `json:"status"`
-	ScheduleID string    `json:"schedule_id,omitempty"`
-	PeriodFrom string    `json:"period_from,omitempty"`
-	PeriodTo   string    `json:"period_to,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID             string         `json:"id"`
+	Report         string         `json:"report"`
+	Format         string         `json:"format"`
+	Status         string         `json:"status"`
+	ScheduleID     string         `json:"schedule_id,omitempty"`
+	Owner          string         `json:"owner,omitempty"`
+	Period         string         `json:"period,omitempty"`
+	PeriodFrom     string         `json:"period_from,omitempty"`
+	PeriodTo       string         `json:"period_to,omitempty"`
+	FileName       string         `json:"file_name,omitempty"`
+	ContentType    string         `json:"content_type,omitempty"`
+	DownloadURL    string         `json:"download_url,omitempty"`
+	FileDataBase64 string         `json:"file_data_base64,omitempty"`
+	Summary        *reportSummary `json:"summary,omitempty"`
+	GeneratedAt    time.Time      `json:"generated_at,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
 }
 
 type reportSchedule struct {
@@ -65,11 +77,7 @@ var reportingStore = struct {
 	metrics     map[string]reportingMetric
 	events      []reportingEvent
 }{
-	metrics: map[string]reportingMetric{
-		"sales":     {Domain: "sales", Revenue: 2340000, Expenses: 420000, Cost: 1450000, Inflow: 1760000, Outflow: 890000, AROpen: 230000, APOpen: 110000, UpdatedAt: time.Now().UTC()},
-		"service":   {Domain: "service", Revenue: 740000, Expenses: 190000, Cost: 360000, Inflow: 600000, Outflow: 320000, AROpen: 90000, APOpen: 40000, UpdatedAt: time.Now().UTC()},
-		"inventory": {Domain: "inventory", Revenue: 510000, Expenses: 150000, Cost: 320000, Inflow: 280000, Outflow: 260000, AROpen: 50000, APOpen: 180000, UpdatedAt: time.Now().UTC()},
-	},
+	metrics: defaultReportingMetrics(),
 }
 
 func RegisterHandlers(mux *http.ServeMux) {
@@ -79,9 +87,34 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/reports/ingest", ingestMetricsHandler)
 	mux.HandleFunc("/reports/export", exportHandler)
 	mux.HandleFunc("/reports/exports", exportsHandler)
+	mux.HandleFunc("/reports/exports/", exportDownloadHandler)
 	mux.HandleFunc("/reports/schedules", schedulesHandler)
 	mux.HandleFunc("/reports/schedules/", scheduleRunHandler)
+	mux.HandleFunc("/dev/reset", devResetHandler)
 	mux.HandleFunc("/events", eventsHandler)
+}
+
+func devResetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !isFinanceReportingDevSeedEnabled() {
+		respondError(w, http.StatusForbidden, "dev reset is disabled")
+		return
+	}
+
+	reportingStore.Lock()
+	resetReportingStoreLocked()
+	reportingStore.Unlock()
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":    "reset",
+		"exports":   0,
+		"schedules": 0,
+		"events":    0,
+		"timestamp": time.Now().UTC(),
+	})
 }
 
 func reportsHandler(w http.ResponseWriter, r *http.Request) {
@@ -211,41 +244,77 @@ func exportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Report     string `json:"report"`
-		Format     string `json:"format"`
-		ScheduleID string `json:"schedule_id"`
-		PeriodFrom string `json:"period_from"`
-		PeriodTo   string `json:"period_to"`
-	}
+	var req reportExportRequest
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	req.Report = strings.ToLower(strings.TrimSpace(req.Report))
+	req.Format = strings.ToLower(defaultValue(strings.TrimSpace(req.Format), "xlsx"))
+	req.ScheduleID = strings.TrimSpace(req.ScheduleID)
+	req.Owner = strings.TrimSpace(req.Owner)
+	req.Period = strings.TrimSpace(req.Period)
+	req.PeriodFrom = strings.TrimSpace(req.PeriodFrom)
+	req.PeriodTo = strings.TrimSpace(req.PeriodTo)
+
 	if req.Report == "" {
 		respondError(w, http.StatusBadRequest, "report is required")
 		return
 	}
 
-	reportingStore.Lock()
-	defer reportingStore.Unlock()
-	reportingStore.exportSeq++
-	entity := reportExport{
-		ID:         fmt.Sprintf("re-%05d", reportingStore.exportSeq),
-		Report:     strings.ToLower(strings.TrimSpace(req.Report)),
-		Format:     strings.ToLower(defaultValue(req.Format, "xlsx")),
-		Status:     "ready",
-		ScheduleID: strings.TrimSpace(req.ScheduleID),
-		PeriodFrom: strings.TrimSpace(req.PeriodFrom),
-		PeriodTo:   strings.TrimSpace(req.PeriodTo),
-		CreatedAt:  time.Now().UTC(),
+	if req.Report == "ar-ap" && req.Format == "pdf" {
+		period, err := parseFinanceReportPeriod(req.Period)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		prepared, err := loadARAPReportData(period, req.Owner)
+		if err != nil {
+			respondError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+
+		reportingStore.Lock()
+		reportingStore.exportSeq++
+		exportID := fmt.Sprintf("re-%05d", reportingStore.exportSeq)
+		createdAt := time.Now().UTC()
+		pdfBytes, fileName, err := renderARAPReportPDF(exportID, prepared, createdAt)
+		if err != nil {
+			reportingStore.exportSeq--
+			reportingStore.Unlock()
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		entity := buildPDFReportExport(exportID, req, period, prepared.Summary, createdAt, fileName, pdfBytes)
+		reportingStore.exports = append(reportingStore.exports, entity)
+		appendReportingEvent("ReportExportCreated", entity.ID, map[string]any{
+			"report":    entity.Report,
+			"format":    entity.Format,
+			"period":    entity.Period,
+			"file_name": entity.FileName,
+		})
+		reportingStore.Unlock()
+
+		respondJSON(w, http.StatusCreated, buildReportExportResponse(entity))
+		return
 	}
+
+	reportingStore.Lock()
+	reportingStore.exportSeq++
+	entity := buildLegacyReportExport(
+		fmt.Sprintf("re-%05d", reportingStore.exportSeq),
+		req,
+		time.Now().UTC(),
+	)
 	reportingStore.exports = append(reportingStore.exports, entity)
 	appendReportingEvent("ReportExportCreated", entity.ID, map[string]any{
 		"report": entity.Report,
 		"format": entity.Format,
 	})
-	respondJSON(w, http.StatusCreated, entity)
+	reportingStore.Unlock()
+	respondJSON(w, http.StatusCreated, buildReportExportResponse(entity))
 }
 
 func exportsHandler(w http.ResponseWriter, r *http.Request) {
@@ -264,7 +333,50 @@ func exportsHandler(w http.ResponseWriter, r *http.Request) {
 		out = append(out, entity)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
-	respondJSON(w, http.StatusOK, out)
+	respondJSON(w, http.StatusOK, buildReportExportResponses(out))
+}
+
+func exportDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "reports" || parts[1] != "exports" || parts[3] != "download" {
+		respondError(w, http.StatusNotFound, "route not found")
+		return
+	}
+
+	exportID := strings.TrimSpace(parts[2])
+	reportingStore.RLock()
+	defer reportingStore.RUnlock()
+
+	index := findExportIndexLocked(exportID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "export not found")
+		return
+	}
+
+	entity := reportingStore.exports[index]
+	if strings.TrimSpace(entity.FileDataBase64) == "" {
+		respondError(w, http.StatusNotFound, "export file not found")
+		return
+	}
+
+	payload, err := decodeReportExportPayload(entity.FileDataBase64)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to decode export file")
+		return
+	}
+
+	contentType := defaultValue(strings.TrimSpace(entity.ContentType), "application/octet-stream")
+	fileName := defaultValue(strings.TrimSpace(entity.FileName), entity.ID)
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fileName))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(payload)
 }
 
 func schedulesHandler(w http.ResponseWriter, r *http.Request) {
@@ -341,19 +453,20 @@ func scheduleRunHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reportingStore.exportSeq++
-	export := reportExport{
-		ID:         fmt.Sprintf("re-%05d", reportingStore.exportSeq),
-		Report:     schedule.Report,
-		Format:     schedule.Format,
-		Status:     "ready",
-		ScheduleID: schedule.ID,
-		CreatedAt:  time.Now().UTC(),
-	}
+	export := buildLegacyReportExport(
+		fmt.Sprintf("re-%05d", reportingStore.exportSeq),
+		reportExportRequest{
+			Report:     schedule.Report,
+			Format:     schedule.Format,
+			ScheduleID: schedule.ID,
+		},
+		time.Now().UTC(),
+	)
 	reportingStore.exports = append(reportingStore.exports, export)
 	reportingStore.schedules[index].LastRunAt = time.Now().UTC()
 	reportingStore.schedules[index].UpdatedAt = time.Now().UTC()
 	appendReportingEvent("ReportScheduleRun", schedule.ID, map[string]any{"export_id": export.ID})
-	respondJSON(w, http.StatusCreated, map[string]any{"schedule": reportingStore.schedules[index], "export": export})
+	respondJSON(w, http.StatusCreated, map[string]any{"schedule": reportingStore.schedules[index], "export": buildReportExportResponse(export)})
 }
 
 func eventsHandler(w http.ResponseWriter, r *http.Request) {
@@ -410,6 +523,15 @@ func findScheduleIndexLocked(id string) int {
 	return -1
 }
 
+func findExportIndexLocked(id string) int {
+	for i := range reportingStore.exports {
+		if reportingStore.exports[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func safePercent(top, base float64) float64 {
 	if base == 0 {
 		return 0
@@ -419,6 +541,42 @@ func safePercent(top, base float64) float64 {
 
 func round2(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func defaultReportingMetrics() map[string]reportingMetric {
+	now := time.Now().UTC()
+	return map[string]reportingMetric{
+		"sales":     {Domain: "sales", Revenue: 2340000, Expenses: 420000, Cost: 1450000, Inflow: 1760000, Outflow: 890000, AROpen: 230000, APOpen: 110000, UpdatedAt: now},
+		"service":   {Domain: "service", Revenue: 740000, Expenses: 190000, Cost: 360000, Inflow: 600000, Outflow: 320000, AROpen: 90000, APOpen: 40000, UpdatedAt: now},
+		"inventory": {Domain: "inventory", Revenue: 510000, Expenses: 150000, Cost: 320000, Inflow: 280000, Outflow: 260000, AROpen: 50000, APOpen: 180000, UpdatedAt: now},
+	}
+}
+
+func resetReportingStoreLocked() {
+	reportingStore.exportSeq = 0
+	reportingStore.scheduleSeq = 0
+	reportingStore.eventSeq = 0
+	reportingStore.exports = nil
+	reportingStore.schedules = nil
+	reportingStore.events = nil
+	reportingStore.metrics = defaultReportingMetrics()
+}
+
+func isFinanceReportingDevSeedEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv(financeReportingDevSeedEnvKey))
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err == nil {
+		return enabled
+	}
+	switch strings.ToLower(raw) {
+	case "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {

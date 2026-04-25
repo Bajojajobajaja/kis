@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { SubsystemNavItem } from '../config/navigation'
+import { resourceOptions } from '../domain/fieldOptions'
 
 type Seq = {
   route: number
@@ -150,7 +151,11 @@ export function PlatformServicesWorkbench({ item }: { item: SubsystemNavItem }) 
   const [dispatchForm, setDispatchForm] = useState({ path: '/api/sales/deals', subject: 'agent-1', token: '' })
   const [bindingForm, setBindingForm] = useState({ subjectID: 'agent-1', roles: 'sales_agent' })
   const [rbacForm, setRBACForm] = useState({ subjectID: 'agent-1', role: 'sales_agent' })
-  const [auditForm, setAuditForm] = useState({ actor: 'manager-1', action: 'update_status', resource: 'sales-deals' })
+  const [auditForm, setAuditForm] = useState({
+    actor: 'manager-1',
+    action: 'update_status',
+    resource: resourceOptions[0]?.value ?? 'finance/invoices',
+  })
   const [contractForm, setContractForm] = useState({ eventType: 'SalePaid', version: 'v1' })
   const [notificationForm, setNotificationForm] = useState({ eventType: 'SalePaid', channel: 'email' as Notification['channel'], recipient: 'client@example.com' })
   const [sagaForm, setSagaForm] = useState({ name: 'sale-fulfillment', steps: '2' })
@@ -520,7 +525,13 @@ export function PlatformServicesWorkbench({ item }: { item: SubsystemNavItem }) 
           <form className="crm-form-grid" onSubmit={onAppendAudit}>
             <input placeholder="Исполнитель" value={auditForm.actor} onChange={(event) => setAuditForm((prev) => ({ ...prev, actor: event.target.value }))} />
             <input placeholder="Действие" value={auditForm.action} onChange={(event) => setAuditForm((prev) => ({ ...prev, action: event.target.value }))} />
-            <input placeholder="Ресурс" value={auditForm.resource} onChange={(event) => setAuditForm((prev) => ({ ...prev, resource: event.target.value }))} />
+            <select value={auditForm.resource} onChange={(event) => setAuditForm((prev) => ({ ...prev, resource: event.target.value }))}>
+              {resourceOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <button className="btn-secondary" type="submit">Добавить audit</button>
           </form>
           <form className="crm-form-grid" onSubmit={onCreateContract}>

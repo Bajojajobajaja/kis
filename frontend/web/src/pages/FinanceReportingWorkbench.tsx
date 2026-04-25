@@ -1,6 +1,10 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { SubsystemNavItem } from '../config/navigation'
+import { useEntityStore } from '../domain/EntityStoreContext'
+import { buildCarDemandAnalytics, buildPartsDemandAnalytics } from '../domain/demandAnalytics'
+import { paymentMethodOptions } from '../domain/fieldOptions'
+import { fetchPartsUsages } from '../domain/servicePartsUsageApi'
 
 type Seq = {
 	account: number
@@ -132,6 +136,7 @@ const complianceStatusLabel: Record<ComplianceRun['status'], string> = {
 }
 
 export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) {
+	const { getRecords } = useEntityStore()
 	const seq = useRef<Seq>({
 		account: 1,
 		entry: 1,
@@ -149,6 +154,9 @@ export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) 
 		seq.current[bucket] += 1
 		return `${prefix}-${String(value).padStart(4, '0')}`
 	}
+	const dealRecords = getRecords('crm-sales/deals')
+	const carRecords = getRecords('crm-sales/cars')
+	const stockRecords = getRecords('inventory/stock')
 
 	const [notice, setNotice] = useState('')
 	const [accounts, setAccounts] = useState<Account[]>([
@@ -172,11 +180,19 @@ export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) 
 	const [complianceRuns, setComplianceRuns] = useState<ComplianceRun[]>([])
 	const [events, setEvents] = useState<DomainEvent[]>([])
 	const [refreshRuns, setRefreshRuns] = useState(0)
+	const [partsDemandError, setPartsDemandError] = useState('')
+	const [partsDemandLoading, setPartsDemandLoading] = useState(true)
+	const [partsDemandSnapshot, setPartsDemandSnapshot] = useState<Awaited<ReturnType<typeof fetchPartsUsages>>>([])
 
 	const [accountForm, setAccountForm] = useState({ code: '', name: '', category: 'asset' as Account['category'] })
 	const [ledgerForm, setLedgerForm] = useState({ document: '', eventType: 'SalePaid', amount: '1000' })
 	const [invoiceForm, setInvoiceForm] = useState({ party: '', amount: '1000', kind: 'ar' as Invoice['kind'] })
-	const [paymentForm, setPaymentForm] = useState({ invoiceID: '', amount: '500', method: 'bank_transfer', externalID: '' })
+	const [paymentForm, setPaymentForm] = useState({
+		invoiceID: '',
+		amount: '500',
+		method: paymentMethodOptions[0]?.value ?? 'Банковский перевод',
+		externalID: '',
+	})
 	const [costingForm, setCostingForm] = useState({ domain: 'sales' as Costing['domain'], revenue: '1000', totalCost: '650' })
 	const [reportForm, setReportForm] = useState({ report: 'pnl', format: 'xlsx' as ReportExport['format'] })
 	const [scheduleForm, setScheduleForm] = useState({ name: 'Ежедневный отчет', report: 'pnl', format: 'xlsx' as ReportSchedule['format'] })
@@ -407,6 +423,48 @@ export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) 
 		return { revenue: round2(revenue), expenses: round2(expenses), marginPct }
 	}, [snapshots])
 
+	useEffect(() => {
+		let isCancelled = false
+
+		const loadPartsDemand = async () => {
+			setPartsDemandLoading(true)
+			setPartsDemandError('')
+			try {
+				const usages = await fetchPartsUsages('writeoff')
+				if (!isCancelled) {
+					setPartsDemandSnapshot(usages)
+				}
+			} catch (error) {
+				if (!isCancelled) {
+					setPartsDemandError(
+						error instanceof Error ? error.message : 'Не удалось загрузить спрос по запчастям.',
+					)
+				}
+			} finally {
+				if (!isCancelled) {
+					setPartsDemandLoading(false)
+				}
+			}
+		}
+
+		void loadPartsDemand()
+		return () => {
+			isCancelled = true
+		}
+	}, [])
+
+	const carDemand = useMemo(
+		() => buildCarDemandAnalytics(dealRecords, carRecords),
+		[carRecords, dealRecords],
+	)
+	const partsDemand = useMemo(
+		() => buildPartsDemandAnalytics(partsDemandSnapshot, stockRecords),
+		[partsDemandSnapshot, stockRecords],
+	)
+	const topDemandModels = carDemand.models.slice(0, 5)
+	const topDemandVehicles = carDemand.vehicles.slice(0, 5)
+	const topDemandParts = partsDemand.slice(0, 5)
+
 	return (
 		<section className="crm-workbench">
 			<div className="crm-workbench__header">
@@ -435,6 +493,64 @@ export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) 
 						<span>{check.label}</span>
 					</label>
 				))}
+			</div>
+
+			<div className="crm-workbench-grid">
+				<article className="crm-card">
+					<h3>Спрос на автомобили</h3>
+					<p className="crm-mini-title">Топ моделей</p>
+					{topDemandModels.length === 0 ? (
+						<p>Пока нет закрытых продаж для построения спроса.</p>
+					) : (
+						<ul className="crm-list crm-list--compact">
+							{topDemandModels.map((item) => (
+								<li key={item.key}>
+									<div>
+										<strong>{item.label}</strong>
+										<p>Продаж: {item.salesCount} | Выручка: {item.revenue}</p>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+					<p className="crm-mini-title">Проданные автомобили</p>
+					{topDemandVehicles.length === 0 ? (
+						<p>Проданные карточки пока не сформированы.</p>
+					) : (
+						<ul className="crm-list crm-list--compact">
+							{topDemandVehicles.map((item) => (
+								<li key={item.key}>
+									<div>
+										<strong>{item.label}</strong>
+										<p>{item.vin} | Продаж: {item.salesCount} | Выручка: {item.revenue}</p>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</article>
+
+				<article className="crm-card">
+					<h3>Спрос на запчасти</h3>
+					{partsDemandLoading ? (
+						<p>Загружаем фактические списания...</p>
+					) : partsDemandError ? (
+						<p>{partsDemandError}</p>
+					) : topDemandParts.length === 0 ? (
+						<p>Пока нет фактических списаний по запчастям.</p>
+					) : (
+						<ul className="crm-list crm-list--compact">
+							{topDemandParts.map((item) => (
+								<li key={item.key}>
+									<div>
+										<strong>{item.title}</strong>
+										<p>{item.key} | Списано: {item.quantity} | Операций: {item.operations}</p>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</article>
 			</div>
 
 			<div className="crm-workbench-grid">
@@ -496,7 +612,13 @@ export function FinanceReportingWorkbench({ item }: { item: SubsystemNavItem }) 
 							))}
 						</select>
 						<input placeholder="Сумма" value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} />
-						<input placeholder="Способ оплаты" value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value }))} />
+						<select value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value }))}>
+							{paymentMethodOptions.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
 						<input placeholder="Внешний ID (необязательно)" value={paymentForm.externalID} onChange={(event) => setPaymentForm((prev) => ({ ...prev, externalID: event.target.value }))} />
 						<button className="btn-secondary" type="submit">Зафиксировать платеж</button>
 					</form>

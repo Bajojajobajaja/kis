@@ -1,6 +1,343 @@
-import type { SubsystemDefinition, SubsystemSlug } from './model'
+import type {
+  ActionKey,
+  EntityActionDefinition,
+  EntityCreateField,
+  EntityStatusActionDefinition,
+  EntityTabDefinition,
+  SubsystemDefinition,
+  SubsystemSlug,
+} from './model'
+import { buildStoreKey } from './model'
 
-export const subsystems: SubsystemDefinition[] = [
+type RawEntityTabDefinition = Omit<EntityTabDefinition, 'statusActions'> & {
+  actionStatusMap?: Partial<Record<ActionKey, string>>
+  statusActions?: Partial<Record<string, EntityStatusActionDefinition[]>>
+}
+
+type RawSubsystemDefinition = Omit<SubsystemDefinition, 'tabs'> & {
+  tabs: RawEntityTabDefinition[]
+}
+
+const financeInvoiceCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Счет на оплату WO-10035', required: true },
+  { key: 'counterparty', label: 'Контрагент', placeholder: 'ООО АВТОПАРК', required: true },
+  { key: 'direction', label: 'Тип счета', placeholder: 'Исходящий', required: true },
+  { key: 'amount', label: 'Сумма', placeholder: '185 000', required: true },
+  { key: 'dueDate', label: 'Срок оплаты', placeholder: '2026-03-11', required: true },
+]
+
+const financePaymentCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Оплата по INV-100103', required: true },
+  { key: 'invoice', label: 'Счет', placeholder: 'INV-100103', required: true },
+  { key: 'amount', label: 'Сумма', placeholder: '185 000', required: true },
+  { key: 'method', label: 'Метод', placeholder: 'Банковский перевод', required: true },
+]
+
+const financeReportCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'AR/AP Февраль', required: true },
+  { key: 'type', label: 'Тип отчета', placeholder: 'AR/AP', required: true },
+  { key: 'period', label: 'Период', placeholder: '02.2026', required: true },
+  { key: 'format', label: 'Формат', placeholder: 'PDF', required: true },
+  { key: 'owner', label: 'Ответственный', placeholder: 'Финансовый менеджер', required: true },
+]
+
+const financeDocumentCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Платежное поручение', required: true },
+  { key: 'number', label: 'Номер', placeholder: 'PP-88017', required: true },
+  { key: 'docType', label: 'Тип', placeholder: 'Платежное поручение', required: true },
+  { key: 'counterparty', label: 'Контрагент', placeholder: 'ООО Партс', required: true },
+  { key: 'owner', label: 'Ответственный', placeholder: 'Бухгалтер' },
+]
+
+const inventoryStockCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Масляный фильтр', required: true },
+  { key: 'sku', label: 'SKU', placeholder: 'PART-FILTER', required: true },
+  { key: 'available', label: 'Количество', placeholder: '14', required: true },
+  { key: 'reserved', label: 'В резерве', placeholder: '0' },
+  { key: 'min', label: 'Мин. остаток', placeholder: '10', required: true },
+  { key: 'warehouse', label: 'Склад', placeholder: 'Основной', required: true },
+]
+
+const inventoryPurchaseCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Заказ фильтров', required: true },
+  { key: 'stockItemId', label: 'Товар', placeholder: 'STK-2101', required: true },
+  { key: 'supplier', label: 'Поставщик', placeholder: 'ООО Партс', required: true },
+  { key: 'amount', label: 'Сумма', placeholder: '340 000', required: true },
+  { key: 'eta', label: 'Срок поставки', placeholder: '2026-03-10', required: true },
+]
+
+const inventoryDocumentCreateFields: EntityCreateField[] = [
+  { key: 'title', label: 'Название', placeholder: 'Накладная поставки', required: true },
+  { key: 'number', label: 'Номер', placeholder: 'WH-30005', required: true },
+  { key: 'supplier', label: 'Поставщик', placeholder: 'ООО Партс', required: true },
+  { key: 'owner', label: 'Ответственный', placeholder: 'Кладовщик' },
+]
+
+const tabOverrides: Record<string, Partial<RawEntityTabDefinition>> = {
+  'crm-sales/clients': {
+    hideStatusUi: true,
+    statusActions: {
+      active: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'delete', label: 'Удалить', critical: true },
+      ],
+      paused: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'delete', label: 'Удалить', critical: true },
+      ],
+      archived: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'delete', label: 'Удалить', critical: true },
+      ],
+    },
+  },
+  'inventory/stock': {
+    title: 'Остатки',
+    entityName: 'позиция',
+    entityNamePlural: 'Остатки',
+    columns: [
+      { key: 'sku', label: 'SKU' },
+      { key: 'available', label: 'Доступно' },
+      { key: 'reserved', label: 'В резерве' },
+      { key: 'min', label: 'Мин. остаток' },
+      { key: 'warehouse', label: 'Склад' },
+    ],
+    statuses: [
+      { key: 'normal', label: 'Норма', tone: 'success' },
+      { key: 'low', label: 'Низкий остаток', tone: 'warning' },
+      { key: 'critical', label: 'Критично', tone: 'danger' },
+    ],
+    actions: [
+      { key: 'create', label: 'Добавить позицию' },
+      { key: 'edit', label: 'Редактировать' },
+    ],
+    createFields: inventoryStockCreateFields,
+  },
+  'inventory/purchases': {
+    title: 'Закупки',
+    entityName: 'закупка',
+    entityNamePlural: 'Закупки',
+    columns: [
+      { key: 'stockItemId', label: 'Товар' },
+      { key: 'supplier', label: 'Поставщик' },
+      { key: 'amount', label: 'Сумма' },
+      { key: 'eta', label: 'Поставка' },
+    ],
+    statuses: [
+      { key: 'requested', label: 'Запрошено', tone: 'info' },
+      { key: 'approved', label: 'Согласовано', tone: 'warning' },
+      { key: 'ordered', label: 'Заказано', tone: 'warning' },
+      { key: 'in_transit', label: 'В пути', tone: 'warning' },
+      { key: 'closed', label: 'Закрыто', tone: 'neutral', closed: true },
+      { key: 'cancelled', label: 'Отменено', tone: 'danger', closed: true },
+    ],
+    actions: [
+      { key: 'create', label: 'Создать закупку' },
+      { key: 'edit', label: 'Редактировать' },
+      { key: 'post', label: 'Следующий этап', critical: true },
+      { key: 'cancel', label: 'Отменить', critical: true },
+      { key: 'close', label: 'Принять и закрыть', critical: true },
+    ],
+    createFields: inventoryPurchaseCreateFields,
+    statusActions: {
+      requested: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Согласовать', nextStatus: 'approved' },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+      approved: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Заказать', nextStatus: 'ordered' },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+      ordered: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Отметить в пути', nextStatus: 'in_transit' },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+      in_transit: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'close', label: 'Принять и закрыть', nextStatus: 'closed', critical: true },
+      ],
+    },
+  },
+  'inventory/documents': {
+    title: 'Накладные',
+    entityName: 'накладная',
+    entityNamePlural: 'Накладные',
+    columns: [
+      { key: 'number', label: 'Номер' },
+      { key: 'supplier', label: 'Поставщик' },
+      { key: 'owner', label: 'Ответственный' },
+    ],
+    statuses: [
+      { key: 'draft', label: 'Черновик', tone: 'warning' },
+      { key: 'expected', label: 'Ожидается поставка', tone: 'info' },
+      { key: 'received', label: 'Принята', tone: 'success' },
+      { key: 'archived', label: 'Архив', tone: 'neutral', closed: true },
+      { key: 'cancelled', label: 'Отменена', tone: 'danger', closed: true },
+    ],
+    actions: [
+      { key: 'create', label: 'Создать накладную' },
+      { key: 'edit', label: 'Редактировать' },
+    ],
+    createFields: inventoryDocumentCreateFields,
+  },
+  'finance/invoices': {
+    columns: [
+      { key: 'counterparty', label: 'Контрагент' },
+      { key: 'direction', label: 'Тип' },
+      { key: 'amount', label: 'Сумма' },
+      { key: 'paidAmount', label: 'Оплачено' },
+      { key: 'dueDate', label: 'Срок' },
+    ],
+    statuses: [
+      { key: 'issued', label: 'Выставлен', tone: 'info' },
+      { key: 'paid', label: 'Оплачен', tone: 'success', closed: true },
+      { key: 'cancelled', label: 'Отменен', tone: 'danger', closed: true },
+    ],
+    actions: [
+      { key: 'create', label: 'Создать счет' },
+      { key: 'edit', label: 'Редактировать' },
+      { key: 'cancel', label: 'Отменить', critical: true },
+    ],
+    createFields: financeInvoiceCreateFields,
+    statusActions: {
+      issued: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+    },
+  },
+  'finance/payments': {
+    actions: [
+      { key: 'create', label: 'Создать платеж' },
+      { key: 'edit', label: 'Редактировать' },
+      { key: 'post', label: 'Подтвердить', critical: true },
+      { key: 'close', label: 'Сверить', critical: true },
+      { key: 'cancel', label: 'Отменить', critical: true },
+    ],
+    createFields: financePaymentCreateFields,
+    statusActions: {
+      initiated: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Подтвердить', nextStatus: 'confirmed', critical: true },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+      confirmed: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'close', label: 'Сверить', nextStatus: 'reconciled', critical: true },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+    },
+  },
+  'finance/reports': {
+    columns: [
+      { key: 'period', label: 'Период' },
+      { key: 'format', label: 'Формат' },
+      { key: 'openInvoiceTotal', label: 'Открыто' },
+      { key: 'reconciledPaymentsTotal', label: 'Сверено' },
+    ],
+    statuses: [
+      { key: 'draft', label: 'Черновик', tone: 'warning' },
+      { key: 'generated', label: 'Сформирован', tone: 'info' },
+      { key: 'archived', label: 'Архив', tone: 'neutral', closed: true },
+    ],
+    actions: [
+      { key: 'create', label: 'Создать отчет' },
+      { key: 'edit', label: 'Редактировать' },
+      { key: 'post', label: 'Сформировать', critical: true },
+      { key: 'archive', label: 'Архивировать', critical: true },
+    ],
+    createFields: financeReportCreateFields,
+    statusActions: {
+      draft: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Сформировать', nextStatus: 'generated', critical: true },
+      ],
+      generated: [
+        { key: 'archive', label: 'Архивировать', nextStatus: 'archived', critical: true },
+      ],
+    },
+  },
+  'finance/documents': {
+    columns: [
+      { key: 'source', label: 'Источник' },
+      { key: 'number', label: 'Номер' },
+      { key: 'docType', label: 'Тип' },
+      { key: 'counterparty', label: 'Контрагент' },
+      { key: 'owner', label: 'Ответственный' },
+    ],
+    statuses: [
+      { key: 'draft', label: 'Черновик', tone: 'warning' },
+      { key: 'expected', label: 'Ожидается', tone: 'info' },
+      { key: 'posted', label: 'Проведен', tone: 'success' },
+      { key: 'received', label: 'Принят', tone: 'success' },
+      { key: 'archived', label: 'Архив', tone: 'neutral', closed: true },
+      { key: 'cancelled', label: 'Отменен', tone: 'danger', closed: true },
+    ],
+    actions: [
+      { key: 'create', label: 'Создать документ' },
+      { key: 'edit', label: 'Редактировать' },
+      { key: 'post', label: 'Провести', critical: true },
+      { key: 'archive', label: 'Архивировать', critical: true },
+      { key: 'cancel', label: 'Отменить', critical: true },
+    ],
+    createFields: financeDocumentCreateFields,
+    statusActions: {
+      draft: [
+        { key: 'edit', label: 'Редактировать' },
+        { key: 'post', label: 'Провести', nextStatus: 'posted', critical: true },
+        { key: 'cancel', label: 'Отменить', nextStatus: 'cancelled', critical: true },
+      ],
+      posted: [
+        { key: 'archive', label: 'Архивировать', nextStatus: 'archived', critical: true },
+      ],
+    },
+  },
+}
+
+function buildStatusActionsFromMap(
+  tab: RawEntityTabDefinition,
+): Partial<Record<string, EntityStatusActionDefinition[]>> {
+  const actions = tab.actions.filter((action) => action.key !== 'create')
+  return Object.fromEntries(
+    tab.statuses.map((status) => [
+      status.key,
+      actions.map((action) => ({
+        key: action.key,
+        label: action.label,
+        critical: action.critical,
+        nextStatus: tab.actionStatusMap?.[action.key],
+      })),
+    ]),
+  )
+}
+
+function finalizeTabDefinition(
+  storeKey: string,
+  tab: RawEntityTabDefinition,
+): EntityTabDefinition {
+  const override = tabOverrides[storeKey]
+  const merged: RawEntityTabDefinition = {
+    ...tab,
+    ...(override ?? {}),
+  }
+  const allowDeleteAction = storeKey !== 'inventory/stock' && storeKey !== 'platform/roles'
+  const actions = !allowDeleteAction || merged.actions.some((action) => action.key === 'delete')
+    ? merged.actions
+    : [...merged.actions, deleteAction]
+  const statusActions = merged.statusActions ?? buildStatusActionsFromMap({ ...merged, actions })
+  const { actionStatusMap: _actionStatusMap, ...finalTab } = merged
+
+  return {
+    ...finalTab,
+    actions,
+    statusActions,
+  }
+}
+
+const rawSubsystems: RawSubsystemDefinition[] = [
   {
     slug: 'crm-sales',
     title: 'CRM и продажи',
@@ -8,6 +345,7 @@ export const subsystems: SubsystemDefinition[] = [
     tabs: [
       {
         slug: 'clients',
+        hideStatusUi: true,
         title: 'Клиенты',
         entityName: 'клиент',
         entityNamePlural: 'Клиенты',
@@ -36,10 +374,6 @@ export const subsystems: SubsystemDefinition[] = [
           { key: 'segment', label: 'Сегмент', placeholder: 'Корпоративный' },
           { key: 'owner', label: 'Ответственный', placeholder: 'Менеджер' },
         ],
-        actionStatusMap: {
-          archive: 'archived',
-          reopen: 'active',
-        },
       },
       {
         slug: 'leads',
@@ -89,15 +423,12 @@ export const subsystems: SubsystemDefinition[] = [
         columns: [
           { key: 'client', label: 'Клиент' },
           { key: 'vin', label: 'VIN' },
+          { key: 'carPrice', label: 'Стоимость авто' },
           { key: 'amount', label: 'Сумма' },
         ],
         statuses: [
-          { key: 'new', label: 'Новая', tone: 'info' },
-          { key: 'proposal', label: 'КП отправлено', tone: 'warning' },
-          { key: 'negotiation', label: 'Переговоры', tone: 'warning' },
-          { key: 'won', label: 'Выиграна', tone: 'success' },
-          { key: 'lost', label: 'Проиграна', tone: 'danger', closed: true },
-          { key: 'closed', label: 'Закрыта', tone: 'neutral', closed: true },
+          { key: 'new', label: 'Сделка в работе', tone: 'info' },
+          { key: 'closed', label: 'Сделка закрыта', tone: 'neutral', closed: true },
         ],
         actions: [
           { key: 'create', label: 'Создать сделку' },
@@ -114,57 +445,53 @@ export const subsystems: SubsystemDefinition[] = [
           { key: 'manager', label: 'Менеджер', placeholder: 'Иванов И.И.' },
         ],
         actionStatusMap: {
-          assign: 'proposal',
-          post: 'won',
+          post: 'new',
           close: 'closed',
           reopen: 'new',
         },
       },
       {
         slug: 'cars',
-        title: 'Cars',
-        entityName: 'car',
-        entityNamePlural: 'Cars',
+        title: 'Автомобили',
+        entityName: 'автомобиль',
+        entityNamePlural: 'Автомобили',
         idPrefix: 'CAR',
         view: 'table',
         columns: [
           { key: 'vin', label: 'VIN' },
-          { key: 'brand', label: 'Brand' },
-          { key: 'model', label: 'Model' },
-          { key: 'year', label: 'Year' },
-          { key: 'plateNumber', label: 'Plate' },
-          { key: 'mileage', label: 'Mileage' },
-          { key: 'ownerClient', label: 'Owner' },
+          { key: 'brand', label: 'Марка' },
+          { key: 'model', label: 'Модель' },
+          { key: 'year', label: 'Год' },
+          { key: 'price', label: 'Стоимость' },
+          { key: 'plateNumber', label: 'Гос.номер' },
+          { key: 'mileage', label: 'Пробег' },
+          { key: 'ownerClient', label: 'Владелец' },
         ],
         statuses: [
-          { key: 'active', label: 'Active', tone: 'success' },
-          { key: 'in_service', label: 'In service', tone: 'warning' },
-          { key: 'sold', label: 'Sold', tone: 'neutral', closed: true },
-          { key: 'archived', label: 'Archived', tone: 'danger', closed: true },
+          { key: 'active', label: 'Активен', tone: 'success' },
+          { key: 'in_service', label: 'В сервисе', tone: 'warning' },
+          { key: 'sold', label: 'Продан', tone: 'neutral', closed: true },
+          { key: 'archived', label: 'В архиве', tone: 'danger', closed: true },
         ],
         actions: [
-          { key: 'create', label: 'Create car' },
-          { key: 'edit', label: 'Edit' },
-          { key: 'assign', label: 'Mark in service' },
-          { key: 'close', label: 'Mark sold', critical: true },
-          { key: 'archive', label: 'Archive', critical: true },
-          { key: 'reopen', label: 'Reopen' },
+          { key: 'create', label: 'Создать авто' },
+          { key: 'edit', label: 'Редактировать' },
+          { key: 'archive', label: 'В архив', critical: true },
+          { key: 'reopen', label: 'Восстановить' },
         ],
         createFields: [
-          { key: 'title', label: 'Title', placeholder: 'Toyota Camry 2020', required: true },
           { key: 'vin', label: 'VIN', placeholder: 'XW7BF4FK30S123456', required: true },
-          { key: 'brand', label: 'Brand', placeholder: 'Toyota', required: true },
-          { key: 'model', label: 'Model', placeholder: 'Camry', required: true },
-          { key: 'year', label: 'Year', placeholder: '2020', required: true },
-          { key: 'plateNumber', label: 'Plate number', placeholder: 'A123BC77' },
-          { key: 'mileage', label: 'Mileage', placeholder: '78000' },
-          { key: 'color', label: 'Color', placeholder: 'Black' },
-          { key: 'ownerClient', label: 'Owner client', placeholder: 'OOO Avtopark' },
-          { key: 'note', label: 'Comment', placeholder: 'Additional notes' },
+          { key: 'brand', label: 'Марка', placeholder: 'Toyota', required: true },
+          { key: 'model', label: 'Модель', placeholder: 'Camry', required: true },
+          { key: 'year', label: 'Год', placeholder: '2020', required: true },
+          { key: 'price', label: 'Стоимость', placeholder: '2 350 000' },
+          { key: 'plateNumber', label: 'Гос.номер', placeholder: 'A123BC77' },
+          { key: 'mileage', label: 'Пробег', placeholder: '78000' },
+          { key: 'color', label: 'Цвет', placeholder: 'Черный' },
+          { key: 'ownerClient', label: 'Владелец', placeholder: 'ООО Автопарк' },
+          { key: 'note', label: 'Комментарий', placeholder: 'Дополнительные заметки' },
         ],
         actionStatusMap: {
-          assign: 'in_service',
-          close: 'sold',
           archive: 'archived',
           reopen: 'active',
         },
@@ -269,11 +596,11 @@ export const subsystems: SubsystemDefinition[] = [
           { key: 'closed', label: 'Закрыт', tone: 'neutral', closed: true },
         ],
         actions: [
-          { key: 'create', label: 'Создать WO' },
+          { key: 'create', label: 'Создать заказ-наряд' },
           { key: 'edit', label: 'Редактировать' },
-          { key: 'assign', label: 'Назначить мастера' },
+          { key: 'assign', label: 'В работу' },
           { key: 'writeoff', label: 'Списать материалы', critical: true },
-          { key: 'close', label: 'Закрыть WO', critical: true },
+          { key: 'close', label: 'Закрыть заказ-наряд', critical: true },
           { key: 'reopen', label: 'Переоткрыть' },
         ],
         createFields: [
@@ -328,54 +655,6 @@ export const subsystems: SubsystemDefinition[] = [
         },
       },
       {
-        slug: 'cars',
-        title: 'Cars',
-        entityName: 'car',
-        entityNamePlural: 'Cars',
-        idPrefix: 'CAR',
-        view: 'table',
-        columns: [
-          { key: 'vin', label: 'VIN' },
-          { key: 'brand', label: 'Brand' },
-          { key: 'model', label: 'Model' },
-          { key: 'year', label: 'Year' },
-          { key: 'plateNumber', label: 'Plate' },
-          { key: 'mileage', label: 'Mileage' },
-          { key: 'ownerClient', label: 'Owner' },
-        ],
-        statuses: [
-          { key: 'active', label: 'Active', tone: 'success' },
-          { key: 'in_service', label: 'In service', tone: 'warning' },
-          { key: 'sold', label: 'Sold', tone: 'neutral', closed: true },
-          { key: 'archived', label: 'Archived', tone: 'danger', closed: true },
-        ],
-        actions: [
-          { key: 'create', label: 'Create car' },
-          { key: 'edit', label: 'Edit' },
-          { key: 'assign', label: 'Mark in service' },
-          { key: 'close', label: 'Mark sold', critical: true },
-          { key: 'archive', label: 'Archive', critical: true },
-          { key: 'reopen', label: 'Reopen' },
-        ],
-        createFields: [
-          { key: 'title', label: 'Title', placeholder: 'Toyota Camry 2020', required: true },
-          { key: 'vin', label: 'VIN', placeholder: 'XW7BF4FK30S123456', required: true },
-          { key: 'brand', label: 'Brand', placeholder: 'Toyota', required: true },
-          { key: 'model', label: 'Model', placeholder: 'Camry', required: true },
-          { key: 'year', label: 'Year', placeholder: '2020', required: true },
-          { key: 'plateNumber', label: 'Plate number', placeholder: 'A123BC77' },
-          { key: 'mileage', label: 'Mileage', placeholder: '78000' },
-          { key: 'color', label: 'Color', placeholder: 'Black' },
-          { key: 'ownerClient', label: 'Owner client', placeholder: 'OOO Avtopark' },
-          { key: 'note', label: 'Comment', placeholder: 'Additional notes' },
-        ],
-        actionStatusMap: {
-          assign: 'in_service',
-          close: 'sold',
-          archive: 'archived',
-          reopen: 'active',
-        },
-      },      {
         slug: 'documents',
         title: 'Документы',
         entityName: 'документ',
@@ -385,7 +664,7 @@ export const subsystems: SubsystemDefinition[] = [
         columns: [
           { key: 'number', label: 'Номер' },
           { key: 'docType', label: 'Тип' },
-          { key: 'wo', label: 'WO' },
+          { key: 'wo', label: 'Заказ-наряд' },
         ],
         statuses: [
           { key: 'draft', label: 'Черновик', tone: 'warning' },
@@ -402,7 +681,7 @@ export const subsystems: SubsystemDefinition[] = [
           { key: 'title', label: 'Название', placeholder: 'Сервисный акт', required: true },
           { key: 'number', label: 'Номер', placeholder: 'SA-20017', required: true },
           { key: 'docType', label: 'Тип', placeholder: 'Акт', required: true },
-          { key: 'wo', label: 'WO', placeholder: 'WO-10035', required: true },
+          { key: 'wo', label: 'Заказ-наряд', placeholder: 'WO-10035', required: true },
         ],
         actionStatusMap: {
           post: 'posted',
@@ -419,7 +698,7 @@ export const subsystems: SubsystemDefinition[] = [
         view: 'timeline',
         columns: [
           { key: 'date', label: 'Дата' },
-          { key: 'wo', label: 'WO' },
+          { key: 'wo', label: 'Заказ-наряд' },
           { key: 'owner', label: 'Ответственный' },
         ],
         statuses: [
@@ -436,7 +715,7 @@ export const subsystems: SubsystemDefinition[] = [
         createFields: [
           { key: 'title', label: 'Название', placeholder: 'Контроль качества', required: true },
           { key: 'date', label: 'Дата', placeholder: '2026-03-05', required: true },
-          { key: 'wo', label: 'WO', placeholder: 'WO-10035' },
+          { key: 'wo', label: 'Заказ-наряд', placeholder: 'WO-10035' },
           { key: 'owner', label: 'Ответственный', placeholder: 'Старший мастер' },
         ],
         actionStatusMap: {
@@ -450,7 +729,7 @@ export const subsystems: SubsystemDefinition[] = [
   {
     slug: 'inventory',
     title: 'Склад и закупки',
-    summary: 'Остатки, закупки, движения и складские документы.',
+    summary: 'Остатки, закупки и накладные.',
     tabs: [
       {
         slug: 'stock',
@@ -462,6 +741,8 @@ export const subsystems: SubsystemDefinition[] = [
         columns: [
           { key: 'sku', label: 'SKU' },
           { key: 'available', label: 'Доступно' },
+          { key: 'reserved', label: 'В резерве' },
+          { key: 'min', label: 'Мин. остаток' },
           { key: 'warehouse', label: 'Склад' },
         ],
         statuses: [
@@ -481,6 +762,8 @@ export const subsystems: SubsystemDefinition[] = [
           { key: 'title', label: 'Название', placeholder: 'Масляный фильтр', required: true },
           { key: 'sku', label: 'SKU', placeholder: 'PART-FILTER', required: true },
           { key: 'available', label: 'Количество', placeholder: '14', required: true },
+          { key: 'reserved', label: 'В резерве', placeholder: '0' },
+          { key: 'min', label: 'Мин. остаток', placeholder: '10', required: true },
           { key: 'warehouse', label: 'Склад', placeholder: 'Основной', required: true },
         ],
         actionStatusMap: {
@@ -497,6 +780,7 @@ export const subsystems: SubsystemDefinition[] = [
         idPrefix: 'PO',
         view: 'kanban',
         columns: [
+          { key: 'stockItemId', label: 'Товар' },
           { key: 'supplier', label: 'Поставщик' },
           { key: 'amount', label: 'Сумма' },
           { key: 'eta', label: 'Поставка' },
@@ -519,6 +803,7 @@ export const subsystems: SubsystemDefinition[] = [
         ],
         createFields: [
           { key: 'title', label: 'Название', placeholder: 'Заказ фильтров', required: true },
+          { key: 'stockItemId', label: 'Товар', placeholder: 'STK-2101', required: true },
           { key: 'supplier', label: 'Поставщик', placeholder: 'ООО Партс', required: true },
           { key: 'amount', label: 'Сумма', placeholder: '340 000', required: true },
           { key: 'eta', label: 'Срок поставки', placeholder: '2026-03-10', required: true },
@@ -531,122 +816,30 @@ export const subsystems: SubsystemDefinition[] = [
         },
       },
       {
-        slug: 'movements',
-        title: 'Движения',
-        entityName: 'движение',
-        entityNamePlural: 'Движения',
-        idPrefix: 'MV',
-        view: 'timeline',
-        columns: [
-          { key: 'sku', label: 'SKU' },
-          { key: 'quantity', label: 'Количество' },
-          { key: 'operation', label: 'Операция' },
-        ],
-        statuses: [
-          { key: 'draft', label: 'Черновик', tone: 'warning' },
-          { key: 'posted', label: 'Проведено', tone: 'success', closed: true },
-          { key: 'cancelled', label: 'Отменено', tone: 'danger', closed: true },
-        ],
-        actions: [
-          { key: 'create', label: 'Создать движение' },
-          { key: 'post', label: 'Провести', critical: true },
-          { key: 'cancel', label: 'Отменить', critical: true },
-          { key: 'reopen', label: 'Вернуть в черновик' },
-        ],
-        createFields: [
-          { key: 'title', label: 'Название', placeholder: 'Приход по накладной', required: true },
-          { key: 'sku', label: 'SKU', placeholder: 'PART-FILTER', required: true },
-          { key: 'quantity', label: 'Количество', placeholder: '25', required: true },
-          { key: 'operation', label: 'Операция', placeholder: 'Приход', required: true },
-        ],
-        actionStatusMap: {
-          post: 'posted',
-          cancel: 'cancelled',
-          reopen: 'draft',
-        },
-      },
-      {
-        slug: 'cars',
-        title: 'Cars',
-        entityName: 'car',
-        entityNamePlural: 'Cars',
-        idPrefix: 'CAR',
+        slug: 'documents',
+        title: 'Накладные',
+        entityName: 'накладная',
+        entityNamePlural: 'Накладные',
+        idPrefix: 'ID',
         view: 'table',
         columns: [
-          { key: 'vin', label: 'VIN' },
-          { key: 'brand', label: 'Brand' },
-          { key: 'model', label: 'Model' },
-          { key: 'year', label: 'Year' },
-          { key: 'plateNumber', label: 'Plate' },
-          { key: 'mileage', label: 'Mileage' },
-          { key: 'ownerClient', label: 'Owner' },
-        ],
-        statuses: [
-          { key: 'active', label: 'Active', tone: 'success' },
-          { key: 'in_service', label: 'In service', tone: 'warning' },
-          { key: 'sold', label: 'Sold', tone: 'neutral', closed: true },
-          { key: 'archived', label: 'Archived', tone: 'danger', closed: true },
-        ],
-        actions: [
-          { key: 'create', label: 'Create car' },
-          { key: 'edit', label: 'Edit' },
-          { key: 'assign', label: 'Mark in service' },
-          { key: 'close', label: 'Mark sold', critical: true },
-          { key: 'archive', label: 'Archive', critical: true },
-          { key: 'reopen', label: 'Reopen' },
-        ],
-        createFields: [
-          { key: 'title', label: 'Title', placeholder: 'Toyota Camry 2020', required: true },
-          { key: 'vin', label: 'VIN', placeholder: 'XW7BF4FK30S123456', required: true },
-          { key: 'brand', label: 'Brand', placeholder: 'Toyota', required: true },
-          { key: 'model', label: 'Model', placeholder: 'Camry', required: true },
-          { key: 'year', label: 'Year', placeholder: '2020', required: true },
-          { key: 'plateNumber', label: 'Plate number', placeholder: 'A123BC77' },
-          { key: 'mileage', label: 'Mileage', placeholder: '78000' },
-          { key: 'color', label: 'Color', placeholder: 'Black' },
-          { key: 'ownerClient', label: 'Owner client', placeholder: 'OOO Avtopark' },
-          { key: 'note', label: 'Comment', placeholder: 'Additional notes' },
-        ],
-        actionStatusMap: {
-          assign: 'in_service',
-          close: 'sold',
-          archive: 'archived',
-          reopen: 'active',
-        },
-      },      {
-        slug: 'documents',
-        title: 'Документы',
-        entityName: 'документ',
-        entityNamePlural: 'Документы',
-        idPrefix: 'ID',
-        view: 'documents',
-        columns: [
           { key: 'number', label: 'Номер' },
-          { key: 'docType', label: 'Тип' },
+          { key: 'supplier', label: 'Поставщик' },
           { key: 'owner', label: 'Ответственный' },
         ],
         statuses: [
-          { key: 'draft', label: 'Черновик', tone: 'warning' },
-          { key: 'posted', label: 'Проведен', tone: 'success', closed: true },
-          { key: 'cancelled', label: 'Отменен', tone: 'danger', closed: true },
+          { key: 'active', label: 'Активна', tone: 'info' },
         ],
         actions: [
-          { key: 'create', label: 'Сформировать документ' },
-          { key: 'post', label: 'Провести', critical: true },
-          { key: 'cancel', label: 'Отменить', critical: true },
-          { key: 'reopen', label: 'Вернуть в черновик' },
+          { key: 'create', label: 'Создать накладную' },
+          { key: 'edit', label: 'Редактировать' },
         ],
         createFields: [
-          { key: 'title', label: 'Название', placeholder: 'Накладная', required: true },
+          { key: 'title', label: 'Название', placeholder: 'Накладная поставки', required: true },
           { key: 'number', label: 'Номер', placeholder: 'WH-30005', required: true },
-          { key: 'docType', label: 'Тип', placeholder: 'Накладная', required: true },
+          { key: 'supplier', label: 'Поставщик', placeholder: 'ООО Партс', required: true },
           { key: 'owner', label: 'Ответственный', placeholder: 'Кладовщик' },
         ],
-        actionStatusMap: {
-          post: 'posted',
-          cancel: 'cancelled',
-          reopen: 'draft',
-        },
       },
     ],
   },
@@ -760,8 +953,9 @@ export const subsystems: SubsystemDefinition[] = [
         ],
         createFields: [
           { key: 'title', label: 'Название', placeholder: 'P&L Февраль', required: true },
+          { key: 'type', label: 'Тип отчета', placeholder: 'AR/AP', required: true },
           { key: 'period', label: 'Период', placeholder: '02.2026', required: true },
-          { key: 'format', label: 'Формат', placeholder: 'XLSX', required: true },
+          { key: 'format', label: 'Формат', placeholder: 'PDF', required: true },
           { key: 'owner', label: 'Ответственный', placeholder: 'Финансовый менеджер', required: true },
         ],
         actionStatusMap: {
@@ -771,54 +965,6 @@ export const subsystems: SubsystemDefinition[] = [
         },
       },
       {
-        slug: 'cars',
-        title: 'Cars',
-        entityName: 'car',
-        entityNamePlural: 'Cars',
-        idPrefix: 'CAR',
-        view: 'table',
-        columns: [
-          { key: 'vin', label: 'VIN' },
-          { key: 'brand', label: 'Brand' },
-          { key: 'model', label: 'Model' },
-          { key: 'year', label: 'Year' },
-          { key: 'plateNumber', label: 'Plate' },
-          { key: 'mileage', label: 'Mileage' },
-          { key: 'ownerClient', label: 'Owner' },
-        ],
-        statuses: [
-          { key: 'active', label: 'Active', tone: 'success' },
-          { key: 'in_service', label: 'In service', tone: 'warning' },
-          { key: 'sold', label: 'Sold', tone: 'neutral', closed: true },
-          { key: 'archived', label: 'Archived', tone: 'danger', closed: true },
-        ],
-        actions: [
-          { key: 'create', label: 'Create car' },
-          { key: 'edit', label: 'Edit' },
-          { key: 'assign', label: 'Mark in service' },
-          { key: 'close', label: 'Mark sold', critical: true },
-          { key: 'archive', label: 'Archive', critical: true },
-          { key: 'reopen', label: 'Reopen' },
-        ],
-        createFields: [
-          { key: 'title', label: 'Title', placeholder: 'Toyota Camry 2020', required: true },
-          { key: 'vin', label: 'VIN', placeholder: 'XW7BF4FK30S123456', required: true },
-          { key: 'brand', label: 'Brand', placeholder: 'Toyota', required: true },
-          { key: 'model', label: 'Model', placeholder: 'Camry', required: true },
-          { key: 'year', label: 'Year', placeholder: '2020', required: true },
-          { key: 'plateNumber', label: 'Plate number', placeholder: 'A123BC77' },
-          { key: 'mileage', label: 'Mileage', placeholder: '78000' },
-          { key: 'color', label: 'Color', placeholder: 'Black' },
-          { key: 'ownerClient', label: 'Owner client', placeholder: 'OOO Avtopark' },
-          { key: 'note', label: 'Comment', placeholder: 'Additional notes' },
-        ],
-        actionStatusMap: {
-          assign: 'in_service',
-          close: 'sold',
-          archive: 'archived',
-          reopen: 'active',
-        },
-      },      {
         slug: 'documents',
         title: 'Документы',
         entityName: 'документ',
@@ -869,30 +1015,28 @@ export const subsystems: SubsystemDefinition[] = [
         view: 'table',
         columns: [
           { key: 'email', label: 'Email' },
-          { key: 'role', label: 'Роль' },
+          { key: 'businessRoleId', label: 'Бизнес-роль' },
           { key: 'department', label: 'Подразделение' },
+          { key: 'phone', label: 'Телефон' },
         ],
         statuses: [
           { key: 'active', label: 'Активен', tone: 'success' },
-          { key: 'suspended', label: 'Приостановлен', tone: 'warning' },
           { key: 'disabled', label: 'Отключен', tone: 'danger', closed: true },
         ],
         actions: [
           { key: 'create', label: 'Создать пользователя' },
           { key: 'edit', label: 'Редактировать' },
-          { key: 'assign', label: 'Назначить роль' },
           { key: 'archive', label: 'Отключить', critical: true },
           { key: 'reopen', label: 'Восстановить' },
         ],
         createFields: [
           { key: 'title', label: 'ФИО', placeholder: 'Иванов Иван Иванович', required: true },
           { key: 'email', label: 'Email', placeholder: 'user@kis.local', required: true },
-          { key: 'role', label: 'Роль', placeholder: 'manager', required: true },
-          { key: 'department', label: 'Подразделение', placeholder: 'Продажи' },
+          { key: 'businessRoleId', label: 'Бизнес-роль', placeholder: 'RLB-SALES', required: true },
+          { key: 'phone', label: 'Телефон', placeholder: '+7 (900) 000-00-00' },
         ],
         actionStatusMap: {
           archive: 'disabled',
-          assign: 'active',
           reopen: 'active',
         },
       },
@@ -904,31 +1048,18 @@ export const subsystems: SubsystemDefinition[] = [
         idPrefix: 'RLB',
         view: 'table',
         columns: [
-          { key: 'scope', label: 'Контур' },
-          { key: 'permissions', label: 'Права' },
+          { key: 'subsystems', label: 'Подсистемы' },
+          { key: 'permissionProfile', label: 'Профиль доступа' },
           { key: 'owner', label: 'Владелец' },
+          { key: 'users', label: 'Пользователи' },
         ],
         statuses: [
           { key: 'active', label: 'Активна', tone: 'success' },
-          { key: 'review', label: 'На ревью', tone: 'warning' },
-          { key: 'closed', label: 'Закрыта', tone: 'neutral', closed: true },
+          { key: 'archived', label: 'В архиве', tone: 'neutral', closed: true },
         ],
-        actions: [
-          { key: 'create', label: 'Создать роль' },
-          { key: 'edit', label: 'Редактировать' },
-          { key: 'close', label: 'Закрыть роль', critical: true },
-          { key: 'reopen', label: 'Переоткрыть' },
-        ],
-        createFields: [
-          { key: 'title', label: 'Название', placeholder: 'sales_manager', required: true },
-          { key: 'scope', label: 'Контур', placeholder: 'CRM', required: true },
-          { key: 'permissions', label: 'Права', placeholder: 'create,edit,archive', required: true },
-          { key: 'owner', label: 'Владелец', placeholder: 'Security Team' },
-        ],
-        actionStatusMap: {
-          close: 'closed',
-          reopen: 'active',
-        },
+        actions: [],
+        createFields: [],
+        statusActions: {},
       },
       {
         slug: 'audits',
@@ -1005,6 +1136,19 @@ export const subsystems: SubsystemDefinition[] = [
     ],
   },
 ]
+
+const deleteAction: EntityActionDefinition = {
+  key: 'delete',
+  label: 'Удалить',
+  critical: true,
+}
+
+export const subsystems: SubsystemDefinition[] = rawSubsystems.map((subsystem) => ({
+  ...subsystem,
+  tabs: subsystem.tabs.map((tab) =>
+    finalizeTabDefinition(buildStoreKey(subsystem.slug, tab.slug), tab),
+  ),
+}))
 
 export function getSubsystemBySlug(slug: string): SubsystemDefinition | undefined {
   return subsystems.find((item) => item.slug === slug)

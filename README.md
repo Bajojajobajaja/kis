@@ -76,6 +76,10 @@ Monorepo skeleton for KIS Nexus microservices platform.
 `go run ./scripts/dev/run-in-modules.go -- golangci-lint run ./...`
 - Test all Go modules:
 `go run ./scripts/dev/run-in-modules.go -- go test ./...`
+- Run DB-tagged persistence tests (requires PostgreSQL):
+`go run ./scripts/dev/run-in-modules.go -- go test -tags db ./internal/transport/http`
+- Check per-service HTTP package coverage threshold (default `55%`):
+`go run ./scripts/testing/check-http-coverage.go --threshold 55 --tags db`
 - Run integration suite (saga flows):
 `go run ./scripts/dev/run-in-modules.go -- go test -tags integration ./...`
 - Run E2E/UAT suite:

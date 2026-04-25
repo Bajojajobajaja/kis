@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { SubsystemNavItem } from '../config/navigation'
+import { normalizePhoneStrict } from '../domain/formatters'
 
 type Lead = {
   id: string
@@ -121,12 +122,16 @@ const paymentMethodLabel: Record<Payment['method'], string> = {
   bank_transfer: 'банковский перевод',
 }
 
-function normalizePhone(value: string): string {
-  return value.replace(/\D+/g, '')
-}
-
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function includesQuery(value: string, query: string): boolean {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) {
+    return true
+  }
+  return value.toLowerCase().includes(normalized)
 }
 
 function normalizeList(value: string): string[] {
@@ -208,6 +213,9 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
   const [reserveForm, setReserveForm] = useState({ dealId: '', vin: '', ttl: '120' })
   const [docForm, setDocForm] = useState({ dealId: '', type: 'invoice' as SalesDoc['type'] })
   const [paymentForm, setPaymentForm] = useState({ dealId: '', amount: '', method: 'card' as Payment['method'] })
+  const [clientSelectQuery, setClientSelectQuery] = useState('')
+  const [leadSelectQuery, setLeadSelectQuery] = useState('')
+  const [dealSelectQuery, setDealSelectQuery] = useState('')
 
   const nextId = (bucket: keyof Sequence, prefix: string): string => {
     const value = seq.current[bucket]
@@ -241,6 +249,16 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
     [clients.length, deals, docs, events, leads.length, payments.length],
   )
 
+  const filteredClients = clients.filter((client) =>
+    includesQuery(`${client.name} ${client.id} ${client.phone} ${client.email}`, clientSelectQuery),
+  )
+  const filteredLeads = leads.filter((lead) =>
+    includesQuery(`${lead.id} ${lead.title} ${lead.phone} ${lead.email}`, leadSelectQuery),
+  )
+  const filteredDeals = deals.filter((deal) =>
+    includesQuery(`${deal.id} ${deal.vin}`, dealSelectQuery),
+  )
+
   const onClientSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!clientForm.name.trim()) {
@@ -248,10 +266,21 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
       return
     }
 
+    const rawPhone = clientForm.phone.trim()
+    let phone = ''
+    if (rawPhone) {
+      const normalized = normalizePhoneStrict(rawPhone)
+      if (!normalized.ok) {
+        setNotice('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        return
+      }
+      phone = normalized.formatted
+    }
+
     const client: Client = {
       id: nextId('client', 'cl'),
       name: clientForm.name.trim(),
-      phone: normalizePhone(clientForm.phone),
+      phone,
       email: normalizeEmail(clientForm.email),
       preferences: normalizeList(clientForm.preferences),
       tags: normalizeList(clientForm.tags),
@@ -270,7 +299,16 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
       return
     }
 
-    const phone = normalizePhone(leadForm.phone)
+    const rawPhone = leadForm.phone.trim()
+    let phone = ''
+    if (rawPhone) {
+      const normalized = normalizePhoneStrict(rawPhone)
+      if (!normalized.ok) {
+        setNotice('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        return
+      }
+      phone = normalized.formatted
+    }
     const email = normalizeEmail(leadForm.email)
     if (!phone && !email) {
       setNotice('Укажите телефон или email.')
@@ -537,13 +575,25 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
         <article className="crm-card">
           <h3>Сделки, цены и VIN</h3>
           <form className="crm-form-grid" onSubmit={onDealSubmit}>
+            <input
+              type="search"
+              placeholder="Поиск клиента"
+              value={clientSelectQuery}
+              onChange={(event) => setClientSelectQuery(event.target.value)}
+            />
             <select value={dealForm.clientId} onChange={(event) => setDealForm((prev) => ({ ...prev, clientId: event.target.value }))}>
               <option value="">Выберите клиента</option>
-              {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+              {filteredClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
             </select>
+            <input
+              type="search"
+              placeholder="Поиск лида"
+              value={leadSelectQuery}
+              onChange={(event) => setLeadSelectQuery(event.target.value)}
+            />
             <select value={dealForm.leadId} onChange={(event) => setDealForm((prev) => ({ ...prev, leadId: event.target.value }))}>
-              <option value="">Лид (необязательно)</option>
-              {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.id} {lead.title}</option>)}
+              <option value="">Лид (опционально)</option>
+              {filteredLeads.map((lead) => <option key={lead.id} value={lead.id}>{lead.id} {lead.title}</option>)}
             </select>
             <input placeholder="VIN" value={dealForm.vin} onChange={(event) => setDealForm((prev) => ({ ...prev, vin: event.target.value }))} />
             <input placeholder="Базовая цена" value={dealForm.basePrice} onChange={(event) => setDealForm((prev) => ({ ...prev, basePrice: event.target.value }))} />
@@ -553,12 +603,18 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
             <button className="btn-secondary" type="submit">Создать сделку</button>
           </form>
           <form className="crm-form-grid" onSubmit={onReserveSubmit}>
+            <input
+              type="search"
+              placeholder="Поиск сделки"
+              value={dealSelectQuery}
+              onChange={(event) => setDealSelectQuery(event.target.value)}
+            />
             <select value={reserveForm.dealId} onChange={(event) => setReserveForm((prev) => ({ ...prev, dealId: event.target.value }))}>
               <option value="">Выберите сделку</option>
-              {deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
+              {filteredDeals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
             </select>
             <input placeholder="VIN для резерва" value={reserveForm.vin} onChange={(event) => setReserveForm((prev) => ({ ...prev, vin: event.target.value }))} />
-            <input placeholder="TTL, мин" value={reserveForm.ttl} onChange={(event) => setReserveForm((prev) => ({ ...prev, ttl: event.target.value }))} />
+            <input placeholder="TTL, дни" value={reserveForm.ttl} onChange={(event) => setReserveForm((prev) => ({ ...prev, ttl: event.target.value }))} />
             <button className="btn-secondary" type="submit">Зарезервировать VIN</button>
           </form>
           <ul className="crm-list crm-list--compact">
@@ -581,30 +637,42 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
         <article className="crm-card">
           <h3>Документы, платежи и события</h3>
           <form className="crm-form-grid" onSubmit={onDocSubmit}>
+            <input
+              type="search"
+              placeholder="Поиск сделки"
+              value={dealSelectQuery}
+              onChange={(event) => setDealSelectQuery(event.target.value)}
+            />
             <select value={docForm.dealId} onChange={(event) => setDocForm((prev) => ({ ...prev, dealId: event.target.value }))}>
               <option value="">Выберите сделку</option>
-              {deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
+              {filteredDeals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
             </select>
             <select value={docForm.type} onChange={(event) => setDocForm((prev) => ({ ...prev, type: event.target.value as SalesDoc['type'] }))}>
-              <option value="contract">договор</option>
-              <option value="invoice">счет</option>
-              <option value="transfer_act">акт передачи</option>
-              <option value="receipt">чек</option>
+              <option value="contract">Договор</option>
+              <option value="invoice">Счет</option>
+              <option value="transfer_act">Акт приема-передачи</option>
+              <option value="receipt">Чек</option>
             </select>
             <button className="btn-secondary" type="submit">Сформировать документ</button>
           </form>
           <form className="crm-form-grid" onSubmit={onPaymentSubmit}>
+            <input
+              type="search"
+              placeholder="Поиск сделки"
+              value={dealSelectQuery}
+              onChange={(event) => setDealSelectQuery(event.target.value)}
+            />
             <select value={paymentForm.dealId} onChange={(event) => setPaymentForm((prev) => ({ ...prev, dealId: event.target.value }))}>
               <option value="">Выберите сделку</option>
-              {deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
+              {filteredDeals.map((deal) => <option key={deal.id} value={deal.id}>{deal.id}</option>)}
             </select>
             <input placeholder="Сумма" value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} />
             <select value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value as Payment['method'] }))}>
-              <option value="card">карта</option>
-              <option value="cash">наличные</option>
-              <option value="bank_transfer">банковский перевод</option>
+              <option value="card">Карта</option>
+              <option value="cash">Наличные</option>
+              <option value="bank_transfer">Банковский перевод</option>
             </select>
-            <button className="btn-secondary" type="submit">Зафиксировать платеж</button>
+            <button className="btn-secondary" type="submit">Зарегистрировать платеж</button>
           </form>
           <div className="crm-subgrid">
             <div>

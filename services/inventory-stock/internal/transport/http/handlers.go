@@ -434,9 +434,6 @@ func issueHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "not enough stock")
 		return
 	}
-	if item.Reserved >= req.Quantity {
-		item.Reserved -= req.Quantity
-	}
 	item.OnHand -= req.Quantity
 	item.LastMovementAt = time.Now().UTC()
 	stockStore.items[index] = item

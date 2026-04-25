@@ -63,8 +63,41 @@ func TestReserveReleaseIssueFlow(t *testing.T) {
 	if updated.OnHand != 8 {
 		t.Fatalf("expected on_hand 8, got %d", updated.OnHand)
 	}
-	if updated.Reserved != 0 {
-		t.Fatalf("expected reserved 0, got %d", updated.Reserved)
+	if updated.Reserved != 2 {
+		t.Fatalf("expected reserved 2, got %d", updated.Reserved)
+	}
+}
+
+func TestIssueDoesNotConsumeReservedStock(t *testing.T) {
+	resetStockStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/stock", strings.NewReader(`{"sku":"sku-2","location":"main","on_hand":28,"reserved":5,"min_qty":2,"max_qty":40,"reorder_point":4}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRR := httptest.NewRecorder()
+	mux.ServeHTTP(createRR, createReq)
+	if createRR.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", createRR.Code)
+	}
+
+	issueReq := httptest.NewRequest(http.MethodPost, "/stock/issue", strings.NewReader(`{"sku":"sku-2","location":"main","quantity":2,"source":"service-parts-usage","reference":"WO-10036"}`))
+	issueReq.Header.Set("Content-Type", "application/json")
+	issueRR := httptest.NewRecorder()
+	mux.ServeHTTP(issueRR, issueReq)
+	if issueRR.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", issueRR.Code)
+	}
+
+	var updated stockItem
+	if err := json.NewDecoder(issueRR.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if updated.OnHand != 26 {
+		t.Fatalf("expected on_hand 26, got %d", updated.OnHand)
+	}
+	if updated.Reserved != 5 {
+		t.Fatalf("expected reserved 5, got %d", updated.Reserved)
 	}
 }
 
@@ -100,5 +133,46 @@ func TestReplenishmentRecommendations(t *testing.T) {
 	}
 	if recs[0].RecommendedQty <= 0 {
 		t.Fatalf("expected positive recommended qty, got %d", recs[0].RecommendedQty)
+	}
+}
+
+func TestResetPersistedStateRestoresSeedStock(t *testing.T) {
+	resetStockStore()
+	resetPersistedState()
+
+	stockStore.RLock()
+	defer stockStore.RUnlock()
+
+	if len(stockStore.items) == 0 {
+		t.Fatalf("expected seed stock items to be restored")
+	}
+
+	found := false
+	for _, item := range stockStore.items {
+		if item.SKU == "PART-FILTER" && item.Location == "main" {
+			found = true
+			if item.OnHand != 3 || item.Reserved != 1 {
+				t.Fatalf("expected PART-FILTER seed stock to be restored, got %+v", item)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected PART-FILTER seed stock item to be restored")
+	}
+}
+
+func TestReplayIssueUsesRestoredSeedStock(t *testing.T) {
+	resetStockStore()
+	resetPersistedState()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/stock/issue", strings.NewReader(`{"sku":"PART-FILTER","source":"service-parts-usage","location":"main","quantity":2,"reference":"WO-PLAN-SMOKE-2"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected replay issue to succeed with 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

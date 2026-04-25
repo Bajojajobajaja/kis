@@ -1,5 +1,6 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
+chcp 65001 >nul
 
 if "%~1"=="" (
   echo run-service.cmd: missing service name argument
@@ -46,11 +47,13 @@ if not exist "%SERVICE_DIR%\cmd\api\main.go" (
   exit /b 1
 )
 set "EXE_PATH=%REPO_ROOT%\bin\%SERVICE%.exe"
-if not exist "%EXE_PATH%" (
-  echo run-service.cmd: binary not found "%EXE_PATH%"
-  echo run-service.cmd: build first: powershell -File scripts/dev/build-services.ps1
+set "CHECK_SCRIPT=%REPO_ROOT%\scripts\dev\check-service-binary.ps1"
+if not exist "%CHECK_SCRIPT%" (
+  echo run-service.cmd: preflight script not found "%CHECK_SCRIPT%"
   exit /b 1
 )
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CHECK_SCRIPT%" -Service "%SERVICE%" -RepoRoot "%REPO_ROOT%"
+if errorlevel 1 exit /b %ERRORLEVEL%
 
 set "TMP_DIR=%SERVICE_DIR%\.tmp"
 set "CACHE_DIR=%TMP_DIR%\go-cache"
@@ -67,6 +70,17 @@ set "DB_NAME=%DB_NAME%"
 set "DB_SSLMODE=disable"
 set "DB_PING_TIMEOUT=5s"
 set "SERVER_PORT=%PORT%"
+if /I "%SERVICE%"=="finance-invoicing" (
+  set "FINANCE_INVOICING_DEV_SEED_ENABLED=true"
+) else (
+  set "FINANCE_INVOICING_DEV_SEED_ENABLED="
+)
+if /I "%SERVICE%"=="finance-reporting" (
+  set "FINANCE_REPORTING_DEV_SEED_ENABLED=true"
+) else (
+  set "FINANCE_REPORTING_DEV_SEED_ENABLED="
+)
+if /I "%SERVICE%"=="service-parts-usage" if not defined PERSISTENCE_STRICT set "PERSISTENCE_STRICT=false"
 set "GOTELEMETRY=off"
 set "TMP=%TMP_DIR%"
 set "TEMP=%TMP_DIR%"

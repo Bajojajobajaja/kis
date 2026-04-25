@@ -440,3 +440,97 @@ func TestEntityStoreReplayAllowsDuplicateVIN(t *testing.T) {
 		t.Fatalf("expected normalized VIN for car 2, got %q", got)
 	}
 }
+
+func TestEntityStorePreservesRelatedTargets(t *testing.T) {
+	resetGatewayStore()
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	saveBody := `{
+		"store": {
+			"crm-sales/deals": [
+				{
+					"id": "DL-9001",
+					"title": "Deal One",
+					"subtitle": "Sample",
+					"status": "new",
+					"values": { "vin": "XW7BF4FK30S123456" },
+					"history": [],
+					"related": [
+						{
+							"id": "rel-1",
+							"label": "Связанный документ",
+							"value": "Договор CTR-9001",
+							"storeKey": "crm-sales/documents",
+							"recordId": "DOC-9001"
+						}
+					]
+				}
+			],
+			"crm-sales/documents": [
+				{
+					"id": "DOC-9001",
+					"title": "Договор CTR-9001",
+					"subtitle": "Сделка DL-9001",
+					"status": "draft",
+					"values": { "number": "CTR-9001" },
+					"history": [],
+					"related": [
+						{
+							"id": "rel-2",
+							"label": "Связанная сделка",
+							"value": "DL-9001: Deal One",
+							"storeKey": "crm-sales/deals",
+							"recordId": "DL-9001"
+						}
+					]
+				}
+			]
+		}
+	}`
+
+	saveRR := doGatewayJSONRequest(mux, http.MethodPut, "/gateway/entity-store", saveBody)
+	if saveRR.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", saveRR.Code)
+	}
+
+	getRR := doGatewayJSONRequest(mux, http.MethodGet, "/gateway/entity-store", "")
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", getRR.Code)
+	}
+
+	var payload struct {
+		Store map[string][]gatewayEntityRecord `json:"store"`
+	}
+	if err := json.NewDecoder(getRR.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode entity store: %v", err)
+	}
+
+	deals := payload.Store["crm-sales/deals"]
+	if len(deals) != 1 {
+		t.Fatalf("expected 1 deal, got %d", len(deals))
+	}
+	if len(deals[0].Related) != 1 {
+		t.Fatalf("expected 1 related entry for deal, got %d", len(deals[0].Related))
+	}
+	if deals[0].Related[0].StoreKey != "crm-sales/documents" {
+		t.Fatalf("expected deal related storeKey to round-trip, got %q", deals[0].Related[0].StoreKey)
+	}
+	if deals[0].Related[0].RecordID != "DOC-9001" {
+		t.Fatalf("expected deal related recordId to round-trip, got %q", deals[0].Related[0].RecordID)
+	}
+
+	docs := payload.Store["crm-sales/documents"]
+	if len(docs) != 1 {
+		t.Fatalf("expected 1 document, got %d", len(docs))
+	}
+	if len(docs[0].Related) != 1 {
+		t.Fatalf("expected 1 related entry for document, got %d", len(docs[0].Related))
+	}
+	if docs[0].Related[0].StoreKey != "crm-sales/deals" {
+		t.Fatalf("expected doc related storeKey to round-trip, got %q", docs[0].Related[0].StoreKey)
+	}
+	if docs[0].Related[0].RecordID != "DL-9001" {
+		t.Fatalf("expected doc related recordId to round-trip, got %q", docs[0].Related[0].RecordID)
+	}
+}

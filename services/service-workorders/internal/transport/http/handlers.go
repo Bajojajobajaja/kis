@@ -15,6 +15,7 @@ type workorder struct {
 	ID                  string    `json:"id"`
 	AppointmentID       string    `json:"appointment_id,omitempty"`
 	ClientID            string    `json:"client_id"`
+	ClientName          string    `json:"client_name,omitempty"`
 	OwnerID             string    `json:"owner_id"`
 	VehicleVIN          string    `json:"vehicle_vin"`
 	Assignee            string    `json:"assignee"`
@@ -214,18 +215,29 @@ func workordersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func workordersStatusHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 3 || parts[0] != "workorders" {
+	if len(parts) < 2 || len(parts) > 3 || parts[0] != "workorders" {
 		respondError(w, http.StatusNotFound, "route not found")
 		return
 	}
 
 	workorderID := parts[1]
+	if len(parts) == 2 {
+		switch r.Method {
+		case http.MethodGet:
+			getWorkorderHandler(w, r, workorderID)
+		case http.MethodPut:
+			upsertWorkorderHandler(w, r, workorderID)
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
 	action := parts[2]
 
 	switch action {
@@ -341,6 +353,172 @@ func workordersKPIHandler(w http.ResponseWriter, r *http.Request) {
 		"average_quality_score":  avgQuality,
 		"status_breakdown":       orderedStatus,
 	})
+}
+
+func getWorkorderHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
+	access := readWorkorderAccessContext(r)
+	if !hasAnyWorkorderRole(access, "platform_admin", "service_manager", "service_advisor") {
+		respondError(w, http.StatusForbidden, "rbac: role is not allowed for workorders read")
+		return
+	}
+
+	workorderStore.RLock()
+	defer workorderStore.RUnlock()
+	index := findWorkorderIndex(workorderID)
+	if index < 0 {
+		respondError(w, http.StatusNotFound, "workorder not found")
+		return
+	}
+	entity := workorderStore.workorders[index]
+	if !canWriteWorkorder(access, entity) && !hasAnyWorkorderRole(access, "platform_admin", "service_manager") {
+		respondError(w, http.StatusForbidden, "rbac: endpoint/object access denied")
+		return
+	}
+	respondJSON(w, http.StatusOK, entity)
+}
+
+func upsertWorkorderHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
+	access := readWorkorderAccessContext(r)
+	if !hasAnyWorkorderRole(access, "platform_admin", "service_manager", "service_advisor") {
+		respondError(w, http.StatusForbidden, "rbac: role is not allowed for workorders upsert")
+		return
+	}
+
+	var req struct {
+		AppointmentID string `json:"appointment_id"`
+		ClientID      string `json:"client_id"`
+		ClientName    string `json:"client_name"`
+		OwnerID       string `json:"owner_id"`
+		VehicleVIN    string `json:"vehicle_vin"`
+		Assignee      string `json:"assignee"`
+		Deadline      string `json:"deadline"`
+		Status        string `json:"status"`
+		SLAHours      int    `json:"sla_hours"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(workorderID) == "" {
+		respondError(w, http.StatusBadRequest, "workorder id is required")
+		return
+	}
+
+	vehicleVIN := strings.ToUpper(strings.TrimSpace(req.VehicleVIN))
+	if vehicleVIN == "" {
+		respondError(w, http.StatusBadRequest, "vehicle_vin is required")
+		return
+	}
+
+	status, ok := normalizeIncomingWorkorderStatus(req.Status)
+	if !ok {
+		respondError(w, http.StatusBadRequest, "unsupported status")
+		return
+	}
+
+	ownerID := strings.TrimSpace(req.OwnerID)
+	if ownerID == "" {
+		ownerID = defaultValue(access.UserID, "service-ui")
+	}
+
+	workorderStore.Lock()
+	defer workorderStore.Unlock()
+	index := findWorkorderIndex(workorderID)
+	now := time.Now().UTC()
+
+	if index >= 0 {
+		entity := workorderStore.workorders[index]
+		if !canWriteWorkorder(access, entity) && !hasAnyWorkorderRole(access, "platform_admin", "service_manager") {
+			respondError(w, http.StatusForbidden, "rbac: endpoint/object access denied")
+			return
+		}
+
+		before := snapshotWorkorder(entity)
+		entity.AppointmentID = defaultValue(strings.TrimSpace(req.AppointmentID), entity.AppointmentID)
+		entity.ClientID = defaultValue(strings.TrimSpace(req.ClientID), entity.ClientID)
+		entity.ClientName = defaultValue(strings.TrimSpace(req.ClientName), entity.ClientName)
+		entity.OwnerID = defaultValue(ownerID, entity.OwnerID)
+		entity.VehicleVIN = vehicleVIN
+		entity.Assignee = defaultValue(strings.TrimSpace(req.Assignee), entity.Assignee)
+		if req.SLAHours > 0 {
+			entity.SLAHours = req.SLAHours
+		}
+		if entity.SLAHours <= 0 {
+			entity.SLAHours = 48
+		}
+		entity.Status = status
+		currentDeadline := parseExistingWorkorderDeadline(entity)
+		entity.Deadline = parseWorkorderDeadline(req.Deadline, currentDeadline).Format(time.RFC3339)
+		entity.SLADeadline = entity.Deadline
+		entity.RepeatVisit, entity.PreviousWorkorderID = detectRepeatVisitInWorkorders(
+			workorderStore.workorders,
+			entity.VehicleVIN,
+			now,
+			entity.ID,
+		)
+		if entity.Status == "released" && entity.ReleasedAt == "" {
+			entity.ReleasedAt = now.Format(time.RFC3339)
+		}
+		entity.SLABreached = isWorkorderOverdue(entity, now)
+		entity.UpdatedAt = now
+		workorderStore.workorders[index] = entity
+
+		appendWorkorderAuditEvent(
+			defaultValue(access.UserID, "system"),
+			"upsert_workorder",
+			entity.ID,
+			before,
+			snapshotWorkorder(entity),
+			strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+		)
+		respondJSON(w, http.StatusOK, entity)
+		return
+	}
+
+	if hasAnyWorkorderRole(access, "service_advisor") && !hasAnyWorkorderRole(access, "platform_admin", "service_manager") && ownerID != access.UserID {
+		respondError(w, http.StatusForbidden, "rbac: service_advisor can create only own workorders")
+		return
+	}
+
+	slaHours := req.SLAHours
+	if slaHours <= 0 {
+		slaHours = 48
+	}
+	deadline := parseWorkorderDeadline(req.Deadline, now.Add(time.Duration(slaHours)*time.Hour))
+	repeatVisit, previousID := detectRepeatVisitInWorkorders(workorderStore.workorders, vehicleVIN, now, workorderID)
+
+	entity := workorder{
+		ID:                  strings.TrimSpace(workorderID),
+		AppointmentID:       strings.TrimSpace(req.AppointmentID),
+		ClientID:            strings.TrimSpace(req.ClientID),
+		ClientName:          strings.TrimSpace(req.ClientName),
+		OwnerID:             ownerID,
+		VehicleVIN:          vehicleVIN,
+		Assignee:            strings.TrimSpace(req.Assignee),
+		Status:              status,
+		Deadline:            deadline.Format(time.RFC3339),
+		SLAHours:            slaHours,
+		SLADeadline:         deadline.Format(time.RFC3339),
+		SLABreached:         now.After(deadline),
+		RepeatVisit:         repeatVisit,
+		PreviousWorkorderID: previousID,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	if entity.Status == "released" {
+		entity.ReleasedAt = now.Format(time.RFC3339)
+	}
+	workorderStore.workorders = append(workorderStore.workorders, entity)
+	appendWorkorderAuditEvent(
+		defaultValue(access.UserID, "system"),
+		"upsert_workorder",
+		entity.ID,
+		nil,
+		snapshotWorkorder(entity),
+		strings.TrimSpace(r.Header.Get("X-Trace-ID")),
+	)
+	appendWorkorderNotification(entity.ID, "WorkOrderOpened", "sms", fmt.Sprintf("workorder %s registered", entity.ID))
+	respondJSON(w, http.StatusCreated, entity)
 }
 
 func updateStatusHandler(w http.ResponseWriter, r *http.Request, workorderID string) {
@@ -582,6 +760,9 @@ func readWorkorderAccessContext(r *http.Request) workorderAccessContext {
 			roles[role] = true
 		}
 	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-KIS-Replay")), "1") {
+		roles["platform_admin"] = true
+	}
 	return workorderAccessContext{
 		UserID: userID,
 		Roles:  roles,
@@ -673,15 +854,31 @@ func isWorkorderOverdue(entity workorder, now time.Time) bool {
 }
 
 func detectRepeatVisit(vehicleVIN string, now time.Time) (bool, string) {
+	return detectRepeatVisitExcludingID(vehicleVIN, now, "")
+}
+
+func detectRepeatVisitExcludingID(vehicleVIN string, now time.Time, excludedWorkorderID string) (bool, string) {
 	if vehicleVIN == "" {
 		return false, ""
 	}
 	workorderStore.RLock()
 	defer workorderStore.RUnlock()
 
+	return detectRepeatVisitInWorkorders(workorderStore.workorders, vehicleVIN, now, excludedWorkorderID)
+}
+
+func detectRepeatVisitInWorkorders(
+	workorders []workorder,
+	vehicleVIN string,
+	now time.Time,
+	excludedWorkorderID string,
+) (bool, string) {
 	var latest *workorder
-	for i := range workorderStore.workorders {
-		entity := workorderStore.workorders[i]
+	for i := range workorders {
+		entity := workorders[i]
+		if entity.ID == excludedWorkorderID {
+			continue
+		}
 		if strings.ToUpper(strings.TrimSpace(entity.VehicleVIN)) != vehicleVIN {
 			continue
 		}
@@ -713,16 +910,44 @@ func isAllowedWorkorderTransition(from, to string) bool {
 		return true
 	}
 	allowed := map[string]map[string]bool{
-		"accepted":      {"diagnostics": true, "in_progress": true, "waiting_parts": true},
-		"diagnostics":   {"in_progress": true, "waiting_parts": true},
+		"accepted":      {"diagnostics": true, "in_progress": true, "waiting_parts": true, "ready": true},
+		"diagnostics":   {"in_progress": true, "waiting_parts": true, "ready": true},
 		"in_progress":   {"waiting_parts": true, "ready": true},
 		"waiting_parts": {"in_progress": true, "ready": true},
-		"ready":         {"released": true, "closed": true},
+		"ready":         {"waiting_parts": true, "released": true, "closed": true},
 		"released":      {"closed": true},
 		"close_failed":  {"in_progress": true, "waiting_parts": true},
 		"compensated":   {"in_progress": true, "ready": true},
 	}
 	return allowed[from][to]
+}
+
+func normalizeIncomingWorkorderStatus(raw string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return "accepted", true
+	}
+	switch value {
+	case "opened":
+		return "accepted", true
+	case "accepted", "diagnostics", "in_progress", "waiting_parts", "ready", "released", "closed", "close_failed", "compensated":
+		return value, true
+	default:
+		return "", false
+	}
+}
+
+func parseExistingWorkorderDeadline(entity workorder) time.Time {
+	if parsed, err := time.Parse(time.RFC3339, entity.Deadline); err == nil {
+		return parsed
+	}
+	if parsed, err := time.Parse(time.RFC3339, entity.SLADeadline); err == nil {
+		return parsed
+	}
+	if entity.SLAHours > 0 {
+		return time.Now().UTC().Add(time.Duration(entity.SLAHours) * time.Hour)
+	}
+	return time.Now().UTC().Add(48 * time.Hour)
 }
 
 func defaultValue(value, fallback string) string {

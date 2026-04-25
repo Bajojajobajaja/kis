@@ -1,4 +1,9 @@
-import type { EntityActionDefinition, EntityStatusDefinition, EntityTabDefinition } from './model'
+import type {
+  EntityActionDefinition,
+  EntityStatusActionDefinition,
+  EntityStatusDefinition,
+  EntityTabDefinition,
+} from './model'
 import { getSubsystemBySlug } from './subsystems'
 
 export function getTabByRoute(
@@ -27,4 +32,11 @@ export function getActionDefinition(
   actionKey: string,
 ): EntityActionDefinition | undefined {
   return tab.actions.find((action) => action.key === actionKey)
+}
+
+export function getAvailableActions(
+  tab: EntityTabDefinition,
+  status: string,
+): EntityStatusActionDefinition[] {
+  return tab.statusActions?.[status] ?? []
 }

@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+const financeInvoicingDevSeedEnvKey = "FINANCE_INVOICING_DEV_SEED_ENABLED"
 
 type invoice struct {
 	ID          string    `json:"id"`
@@ -62,24 +66,7 @@ var financeInvoicingStore = struct {
 	invoices   []invoice
 	payments   []payment
 	events     []invoicingEvent
-}{
-	invoices: []invoice{
-		{
-			ID:         "inv-00001",
-			Number:     "AR-00001",
-			Subject:    "Vehicle sale invoice",
-			PartyID:    "client-100",
-			PartyName:  "Global Auto LLC",
-			Kind:       "ar",
-			Amount:     52000,
-			PaidAmount: 0,
-			Currency:   "USD",
-			Status:     "issued",
-			CreatedAt:  time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
-		},
-	},
-}
+}{}
 
 func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", healthHandler)
@@ -90,6 +77,7 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/payments", paymentsHandler)
 	mux.HandleFunc("/payments/reconcile", reconcileHandler)
 	mux.HandleFunc("/ar-ap/summary", summaryHandler)
+	mux.HandleFunc("/dev/reset", devResetHandler)
 	mux.HandleFunc("/events", eventsHandler)
 }
 
@@ -117,6 +105,7 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, out)
 	case http.MethodPost:
 		var req struct {
+			Number      string  `json:"number"`
 			Subject     string  `json:"subject"`
 			PartyID     string  `json:"party_id"`
 			PartyName   string  `json:"party_name"`
@@ -126,6 +115,7 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 			Currency    string  `json:"currency"`
 			DueDate     string  `json:"due_date"`
 			ExternalRef string  `json:"external_ref"`
+			CreatedAt   string  `json:"created_at"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -143,12 +133,22 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		now := time.Now().UTC()
+		createdAt, err := resolveInvoiceCreatedAt(req.CreatedAt, now)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		financeInvoicingStore.Lock()
 		defer financeInvoicingStore.Unlock()
 		financeInvoicingStore.invoiceSeq++
+		number, err := resolveInvoiceNumber(req.Number, kind, financeInvoicingStore.invoiceSeq)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		entity := invoice{
 			ID:          fmt.Sprintf("inv-%05d", financeInvoicingStore.invoiceSeq),
-			Number:      buildInvoiceNumber(kind, financeInvoicingStore.invoiceSeq),
+			Number:      number,
 			Subject:     defaultValue(strings.TrimSpace(req.Subject), "Invoice"),
 			PartyID:     partyID,
 			PartyName:   strings.TrimSpace(req.PartyName),
@@ -159,7 +159,7 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 			DueDate:     strings.TrimSpace(req.DueDate),
 			Status:      "issued",
 			ExternalRef: strings.TrimSpace(req.ExternalRef),
-			CreatedAt:   now,
+			CreatedAt:   createdAt,
 			UpdatedAt:   now,
 		}
 		financeInvoicingStore.invoices = append(financeInvoicingStore.invoices, entity)
@@ -172,6 +172,29 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func devResetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !isFinanceInvoicingDevSeedEnabled() {
+		respondError(w, http.StatusForbidden, "dev reset is disabled")
+		return
+	}
+
+	financeInvoicingStore.Lock()
+	resetFinanceInvoicingStoreLocked()
+	financeInvoicingStore.Unlock()
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":    "reset",
+		"invoices":  0,
+		"payments":  0,
+		"events":    0,
+		"timestamp": time.Now().UTC(),
+	})
 }
 
 func invoiceByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -516,6 +539,61 @@ func appendInvoicingEvent(eventType, entityID string, payload map[string]any) {
 		Payload:   payload,
 		CreatedAt: time.Now().UTC(),
 	})
+}
+
+func resetFinanceInvoicingStoreLocked() {
+	financeInvoicingStore.invoiceSeq = 0
+	financeInvoicingStore.paymentSeq = 0
+	financeInvoicingStore.eventSeq = 0
+	financeInvoicingStore.invoices = nil
+	financeInvoicingStore.payments = nil
+	financeInvoicingStore.events = nil
+}
+
+func resolveInvoiceCreatedAt(raw string, fallback time.Time) (time.Time, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback, nil
+	}
+	if !isFinanceInvoicingDevSeedEnabled() {
+		return time.Time{}, fmt.Errorf("created_at is allowed only when %s=true", financeInvoicingDevSeedEnvKey)
+	}
+	parsed, err := time.Parse(time.RFC3339, trimmed)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("created_at must be RFC3339")
+	}
+	return parsed.UTC(), nil
+}
+
+func resolveInvoiceNumber(raw, kind string, seq int) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return buildInvoiceNumber(kind, seq), nil
+	}
+	if !isFinanceInvoicingDevSeedEnabled() {
+		return "", fmt.Errorf("number is allowed only when %s=true", financeInvoicingDevSeedEnvKey)
+	}
+	if len(trimmed) > 64 {
+		return "", fmt.Errorf("number is too long")
+	}
+	return trimmed, nil
+}
+
+func isFinanceInvoicingDevSeedEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv(financeInvoicingDevSeedEnvKey))
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err == nil {
+		return enabled
+	}
+	switch strings.ToLower(raw) {
+	case "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {

@@ -92,9 +92,11 @@ type gatewayEntityHistoryRecord struct {
 }
 
 type gatewayEntityRelatedRecord struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Value string `json:"value"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Value    string `json:"value"`
+	StoreKey string `json:"storeKey,omitempty"`
+	RecordID string `json:"recordId,omitempty"`
 }
 
 type gatewayEntityRecord struct {
@@ -678,7 +680,15 @@ func cloneEntityStore(src map[string][]gatewayEntityRecord) map[string][]gateway
 			}
 			if len(record.Related) > 0 {
 				copied.Related = make([]gatewayEntityRelatedRecord, len(record.Related))
-				copy(copied.Related, record.Related)
+				for j, related := range record.Related {
+					copied.Related[j] = gatewayEntityRelatedRecord{
+						ID:       related.ID,
+						Label:    related.Label,
+						Value:    related.Value,
+						StoreKey: related.StoreKey,
+						RecordID: related.RecordID,
+					}
+				}
 			} else {
 				copied.Related = []gatewayEntityRelatedRecord{}
 			}

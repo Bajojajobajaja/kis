@@ -1,8 +1,11 @@
-﻿import { NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 
+import { useAuth } from '../auth/AuthContext'
 import { subsystemNav } from '../config/navigation'
 
 export function DashboardPage() {
+  const { canAccessSubsystem } = useAuth()
+
   return (
     <section>
       <header className="section-header">
@@ -24,7 +27,7 @@ export function DashboardPage() {
             Открыть раздел
           </NavLink>
         </article>
-        {subsystemNav.map((item, index) => (
+        {subsystemNav.filter((item) => canAccessSubsystem(item.slug)).map((item, index) => (
           <article
             key={item.slug}
             className="system-card"

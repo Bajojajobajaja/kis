@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { SubsystemNavItem } from '../config/navigation'
+import { useEntityStore } from '../domain/EntityStoreContext'
+import { isServiceMasterUser, PLATFORM_USERS_STORE_KEY } from '../domain/platform'
 
 type Seq = {
   appointment: number
@@ -81,6 +83,7 @@ function isWarrantyActive(vin: string): boolean {
 }
 
 export function ServiceRepairWorkbench({ item }: { item: SubsystemNavItem }) {
+  const { getRecords } = useEntityStore()
   const seq = useRef<Seq>({ appointment: 1, workorder: 1, invoice: 1, event: 1, procurement: 1 })
   const nextID = (bucket: keyof Seq, prefix: string) => {
     const value = seq.current[bucket]
@@ -112,6 +115,28 @@ export function ServiceRepairWorkbench({ item }: { item: SubsystemNavItem }) {
   const [partsForm, setPartsForm] = useState({ workorderId: '', partCode: 'PART-OIL', qty: '1', action: 'reserve' as 'reserve' | 'consume' | 'return' })
   const [invoiceForm, setInvoiceForm] = useState({ workorderId: '', total: '100' })
   const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: '' })
+
+  const serviceMasterOptions = useMemo(
+    () =>
+      getRecords(PLATFORM_USERS_STORE_KEY)
+        .filter(isServiceMasterUser)
+        .map((record) => ({
+          value: record.id,
+          label: record.title,
+        }))
+        .sort((left, right) => left.label.localeCompare(right.label, 'ru')),
+    [getRecords],
+  )
+
+  const serviceUserLabels = useMemo(
+    () =>
+      new Map(
+        getRecords(PLATFORM_USERS_STORE_KEY).map((record) => [record.id, record.title]),
+      ),
+    [getRecords],
+  )
+
+  const resolveAssigneeLabel = (value: string) => serviceUserLabels.get(value) ?? value
 
   const pushEvent = (type: string, entityId: string, note: string) => {
     const entity: TimelineEvent = { id: nextID('event', 'evt'), type, entityId, note, at: nowISO() }
@@ -169,13 +194,14 @@ export function ServiceRepairWorkbench({ item }: { item: SubsystemNavItem }) {
       return
     }
     const vin = workorderForm.vin.trim().toUpperCase()
+    const assignee = workorderForm.assignee.trim()
     const repeatVisit = workorders.some((wo) => wo.vin === vin && (wo.status === 'released' || wo.status === 'closed'))
     const slaHours = Number(workorderForm.slaHours)
     const deadline = new Date(Date.now() + (Number.isNaN(slaHours) ? 48 : slaHours) * 60 * 60 * 1000).toISOString()
     const workorder: Workorder = {
       id: nextID('workorder', 'wo'),
       vin,
-      assignee: workorderForm.assignee.trim(),
+      assignee,
       status: 'accepted',
       deadline,
       repeatVisit,
@@ -183,7 +209,7 @@ export function ServiceRepairWorkbench({ item }: { item: SubsystemNavItem }) {
     }
     setWorkorders((prev) => [workorder, ...prev])
     setNotice(`Заказ-наряд ${workorder.id} создан.`)
-    pushEvent('WorkOrderOpened', workorder.id, workorder.assignee)
+    pushEvent('WorkOrderOpened', workorder.id, resolveAssigneeLabel(assignee))
     setDiagForm((prev) => ({ ...prev, workorderId: workorder.id }))
     setPartsForm((prev) => ({ ...prev, workorderId: workorder.id }))
     setInvoiceForm((prev) => ({ ...prev, workorderId: workorder.id }))
@@ -333,13 +359,18 @@ export function ServiceRepairWorkbench({ item }: { item: SubsystemNavItem }) {
         <article className="crm-card"><h3>Заказ-наряды</h3>
           <form className="crm-form-grid" onSubmit={onCreateWorkorder}>
             <input placeholder="VIN" value={workorderForm.vin} onChange={(e) => setWorkorderForm((p) => ({ ...p, vin: e.target.value }))} />
-            <input placeholder="Исполнитель" value={workorderForm.assignee} onChange={(e) => setWorkorderForm((p) => ({ ...p, assignee: e.target.value }))} />
+            <select value={workorderForm.assignee} onChange={(e) => setWorkorderForm((p) => ({ ...p, assignee: e.target.value }))}>
+              <option value="">Выберите мастера</option>
+              {serviceMasterOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
             <input placeholder="SLA, часов" value={workorderForm.slaHours} onChange={(e) => setWorkorderForm((p) => ({ ...p, slaHours: e.target.value }))} />
             <button className="btn-secondary" type="submit">Создать WO</button>
           </form>
           <ul className="crm-list crm-list--compact">{workorders.map((wo) => (
             <li key={wo.id}>
-              <div><strong>{wo.id} ({workorderStatusLabel[wo.status]})</strong><p>{wo.assignee} | {wo.vin} | SLA {formatDate(wo.deadline)}</p></div>
+              <div><strong>{wo.id} ({workorderStatusLabel[wo.status]})</strong><p>{resolveAssigneeLabel(wo.assignee)} | {wo.vin} | SLA {formatDate(wo.deadline)}</p></div>
               <div className="crm-list__actions">
                 <select value={wo.status} onChange={(e) => changeStatus(wo.id, e.target.value as WorkorderStatus)}>
                   <option value="accepted">принят</option><option value="diagnostics">диагностика</option><option value="in_progress">в работе</option>

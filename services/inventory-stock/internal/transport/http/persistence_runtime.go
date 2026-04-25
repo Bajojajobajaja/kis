@@ -177,11 +177,32 @@ func WrapWithPersistence(service string, next http.Handler) (http.Handler, error
 	if persistenceBoolEnvOrDefault("OUTBOX_DISPATCH_ENABLED", true) && len(m.outboxTargets) > 0 {
 		m.startOutboxDispatcher()
 	}
-	if err := m.replayJournal(); err != nil {
+	restored, err := m.restoreStateSnapshot()
+	if err != nil {
 		if strict {
-			return nil, fmt.Errorf("journal replay failed: %w", err)
+			return nil, fmt.Errorf("restore persisted state: %w", err)
 		}
-		log.Printf("journal replay failed for %s: %v", service, err)
+		log.Printf("persisted state restore failed for %s: %v", service, err)
+	}
+	if !restored {
+		restored, err = m.restoreEntitySnapshot()
+		if err != nil {
+			if strict {
+				return nil, fmt.Errorf("restore persisted entities: %w", err)
+			}
+			log.Printf("persisted entity restore failed for %s: %v", service, err)
+		}
+	}
+	if !restored {
+		if err := m.replayJournal(); err != nil {
+			if strict {
+				return nil, fmt.Errorf("journal replay failed: %w", err)
+			}
+			log.Printf("journal replay failed for %s: %v", service, err)
+		}
+	}
+	if err := m.saveStateSnapshot(); err != nil {
+		log.Printf("persisted state snapshot failed for %s: %v", service, err)
 	}
 	return m, nil
 }
@@ -262,6 +283,8 @@ func (m *persistenceMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request
 			return
 		}
 		log.Printf("persistence write failed for %s: %v", m.service, err)
+	} else if err := m.saveStateSnapshot(); err != nil {
+		log.Printf("persisted state snapshot failed for %s: %v", m.service, err)
 	}
 
 	recorder.WriteTo(w)
@@ -486,6 +509,36 @@ func (m *persistenceMiddleware) replayJournal() error {
 	return nil
 }
 
+func (m *persistenceMiddleware) restoreStateSnapshot() (bool, error) {
+	raw, err := m.backend.loadState()
+	if err != nil {
+		return false, err
+	}
+	if len(raw) == 0 {
+		return false, nil
+	}
+	if err := restorePersistedState(raw); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (m *persistenceMiddleware) restoreEntitySnapshot() (bool, error) {
+	rawEntities, err := m.backend.listEntityPayloads("entity")
+	if err != nil {
+		return false, err
+	}
+	return restorePersistedEntities(rawEntities)
+}
+
+func (m *persistenceMiddleware) saveStateSnapshot() error {
+	raw, err := capturePersistedState()
+	if err != nil {
+		return err
+	}
+	return m.backend.saveState(raw)
+}
+
 func newPersistenceBackend(service string) (*persistenceBackend, error) {
 	service = strings.TrimSpace(service)
 	if service == "" {
@@ -645,7 +698,7 @@ func (b *persistenceBackend) ensureSchema() error {
 
 func (b *persistenceBackend) loadState() ([]byte, error) {
 	query := fmt.Sprintf(
-		"SELECT encode(convert_to(state_json::text, 'UTF8'), 'base64') FROM kis_service_state WHERE service=%s LIMIT 1;",
+		"SELECT replace(encode(convert_to(state_json::text, 'UTF8'), 'base64'), E'\\n', '') FROM kis_service_state WHERE service=%s LIMIT 1;",
 		persistenceSQLQuote(b.service),
 	)
 	out, err := b.runPSQL(query, true)
@@ -663,8 +716,44 @@ func (b *persistenceBackend) loadState() ([]byte, error) {
 	return decoded, nil
 }
 
+func (b *persistenceBackend) saveState(raw []byte) error {
+	sql := "INSERT INTO kis_service_state(service, state_json, updated_at) VALUES(" +
+		persistenceSQLQuote(b.service) + ", " +
+		persistenceJSONExprFromBytes(raw) + ", NOW()) " +
+		"ON CONFLICT(service) DO UPDATE SET state_json=EXCLUDED.state_json, updated_at=NOW();"
+	_, err := b.runPSQL(sql, false)
+	return err
+}
+
+func (b *persistenceBackend) listEntityPayloads(entityType string) ([][]byte, error) {
+	query := "SELECT replace(encode(convert_to(COALESCE(payload::text, ''), 'UTF8'), 'base64'), E'\\n', '') FROM kis_entities WHERE service=" +
+		persistenceSQLQuote(b.service)
+	if strings.TrimSpace(entityType) != "" {
+		query += " AND entity_type=" + persistenceSQLQuote(entityType)
+	}
+	query += " ORDER BY updated_at ASC, entity_id ASC;"
+	out, err := b.runPSQL(query, true)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	items := make([][]byte, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(line)
+		if err != nil {
+			return nil, fmt.Errorf("decode entity payload: %w", err)
+		}
+		items = append(items, decoded)
+	}
+	return items, nil
+}
+
 func (b *persistenceBackend) listCommands() ([]persistedCommand, error) {
-	query := "SELECT id::text, method, path, query, actor_id, trace_id, encode(convert_to(COALESCE(request_json::text, ''), 'UTF8'), 'base64') FROM kis_http_journal WHERE service=" +
+	query := "SELECT id::text, method, path, query, actor_id, trace_id, replace(encode(convert_to(COALESCE(request_json::text, ''), 'UTF8'), 'base64'), E'\\n', '') FROM kis_http_journal WHERE service=" +
 		persistenceSQLQuote(b.service) + " ORDER BY id ASC;"
 	out, err := b.runPSQL(query, true)
 	if err != nil {
@@ -829,32 +918,43 @@ func (b *persistenceBackend) persist(event persistenceEvent) error {
 }
 
 func (b *persistenceBackend) reserveIdempotency(idKey, requestHash, method, path string, ttl time.Duration) (idempotencyDecision, error) {
-	query := "SELECT status, request_hash, COALESCE(response_code, 0)::text, encode(convert_to(COALESCE(response_json::text, ''), 'UTF8'), 'base64'), COALESCE(EXTRACT(EPOCH FROM updated_at)::bigint, 0)::text " +
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if ttl < time.Second {
+		ttl = time.Second
+	}
+
+	insert := "INSERT INTO kis_http_idempotency(service, idempotency_key, method, path, request_hash, status, created_at, updated_at) VALUES(" +
+		persistenceSQLQuote(b.service) + ", " +
+		persistenceSQLQuote(idKey) + ", " +
+		persistenceSQLQuote(method) + ", " +
+		persistenceSQLQuote(path) + ", " +
+		persistenceSQLQuote(requestHash) + ", 'processing', NOW(), NOW()) " +
+		"ON CONFLICT(service, idempotency_key) DO NOTHING RETURNING status;"
+	out, err := b.runPSQL(insert, true)
+	if err != nil {
+		return idempotencyDecision{}, err
+	}
+	if persistenceLastValueLine(out) != "" {
+		return idempotencyDecision{Action: "proceed"}, nil
+	}
+
+	query := "SELECT status, request_hash, COALESCE(response_code, 0)::text, COALESCE(NULLIF(replace(encode(convert_to(COALESCE(response_json::text, ''), 'UTF8'), 'base64'), E'\\n', ''), ''), '-'), COALESCE(EXTRACT(EPOCH FROM updated_at)::bigint, 0)::text " +
 		"FROM kis_http_idempotency WHERE service=" + persistenceSQLQuote(b.service) +
 		" AND idempotency_key=" + persistenceSQLQuote(idKey) + " LIMIT 1;"
-	out, err := b.runPSQL(query, true)
+	out, err = b.runPSQL(query, true)
 	if err != nil {
 		return idempotencyDecision{}, err
 	}
 	line := persistenceLastValueLine(out)
 	if line == "" {
-		insert := "INSERT INTO kis_http_idempotency(service, idempotency_key, method, path, request_hash, status, created_at, updated_at) VALUES(" +
-			persistenceSQLQuote(b.service) + ", " +
-			persistenceSQLQuote(idKey) + ", " +
-			persistenceSQLQuote(strings.ToUpper(strings.TrimSpace(method))) + ", " +
-			persistenceSQLQuote(path) + ", " +
-			persistenceSQLQuote(requestHash) + ", 'processing', NOW(), NOW());"
-		if _, err := b.runPSQL(insert, false); err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "duplicate key value violates unique constraint") {
-				return b.reserveIdempotency(idKey, requestHash, method, path, ttl)
-			}
-			return idempotencyDecision{}, err
-		}
-		return idempotencyDecision{Action: "proceed"}, nil
+		return idempotencyDecision{}, fmt.Errorf("idempotency row disappeared for key %s", idKey)
 	}
 
 	parts := strings.Split(line, "|")
-	if len(parts) < 5 {
+	for len(parts) < 5 {
+		parts = append(parts, "")
+	}
+	if len(parts) < 2 {
 		return idempotencyDecision{}, fmt.Errorf("invalid idempotency row")
 	}
 
@@ -870,7 +970,7 @@ func (b *persistenceBackend) reserveIdempotency(idKey, requestHash, method, path
 			statusCode = http.StatusOK
 		}
 		responseJSON := []byte{}
-		if encoded := strings.TrimSpace(parts[3]); encoded != "" {
+		if encoded := strings.TrimSpace(parts[3]); encoded != "" && encoded != "-" {
 			decoded, err := base64.StdEncoding.DecodeString(encoded)
 			if err == nil {
 				responseJSON = decoded
@@ -892,14 +992,26 @@ func (b *persistenceBackend) reserveIdempotency(idKey, requestHash, method, path
 		}
 	}
 
-	update := "UPDATE kis_http_idempotency SET method=" + persistenceSQLQuote(strings.ToUpper(strings.TrimSpace(method))) +
+	hashGuard := "(request_hash='' OR request_hash=" + persistenceSQLQuote(requestHash) + ")"
+	stateGuard := "status=" + persistenceSQLQuote(status)
+	if status == "processing" {
+		stateGuard = "status='processing' AND updated_at <= NOW() - (" + persistenceSQLQuote(ttl.String()) + ")::interval"
+	}
+
+	update := "UPDATE kis_http_idempotency SET method=" + persistenceSQLQuote(method) +
 		", path=" + persistenceSQLQuote(path) +
 		", request_hash=" + persistenceSQLQuote(requestHash) +
 		", status='processing', updated_at=NOW() WHERE service=" + persistenceSQLQuote(b.service) +
-		" AND idempotency_key=" + persistenceSQLQuote(idKey) + ";"
-	_, err = b.runPSQL(update, false)
+		" AND idempotency_key=" + persistenceSQLQuote(idKey) +
+		" AND " + hashGuard +
+		" AND " + stateGuard +
+		" RETURNING status;"
+	out, err = b.runPSQL(update, true)
 	if err != nil {
 		return idempotencyDecision{}, err
+	}
+	if persistenceLastValueLine(out) == "" {
+		return idempotencyDecision{Action: "conflict"}, nil
 	}
 	return idempotencyDecision{Action: "proceed"}, nil
 }
@@ -951,7 +1063,7 @@ func (b *persistenceBackend) appendSagaStep(sagaID, stepName, status string, pay
 }
 
 func (b *persistenceBackend) getSaga(sagaID string) (map[string]any, error) {
-	instanceSQL := "SELECT id, saga_type, state, encode(convert_to(COALESCE(context::text, ''), 'UTF8'), 'base64'), created_at::text, updated_at::text FROM kis_saga_instances WHERE id=" +
+	instanceSQL := "SELECT id, saga_type, state, replace(encode(convert_to(COALESCE(context::text, ''), 'UTF8'), 'base64'), E'\\n', ''), created_at::text, updated_at::text FROM kis_saga_instances WHERE id=" +
 		persistenceSQLQuote(sagaID) + " AND service=" + persistenceSQLQuote(b.service) + " LIMIT 1;"
 	instanceOut, err := b.runPSQL(instanceSQL, true)
 	if err != nil {
@@ -982,7 +1094,7 @@ func (b *persistenceBackend) getSaga(sagaID string) (map[string]any, error) {
 		}
 	}
 
-	stepsSQL := "SELECT step_name, status, encode(convert_to(COALESCE(payload::text, ''), 'UTF8'), 'base64'), error, created_at::text FROM kis_saga_steps WHERE saga_id=" +
+	stepsSQL := "SELECT step_name, status, replace(encode(convert_to(COALESCE(payload::text, ''), 'UTF8'), 'base64'), E'\\n', ''), error, created_at::text FROM kis_saga_steps WHERE saga_id=" +
 		persistenceSQLQuote(sagaID) + " ORDER BY id ASC;"
 	stepsOut, err := b.runPSQL(stepsSQL, true)
 	if err != nil {
@@ -1023,7 +1135,7 @@ func (b *persistenceBackend) fetchPendingOutbox(limit int) ([]outboxRecord, erro
 	if limit <= 0 {
 		limit = 50
 	}
-	sql := "SELECT id::text, event_type, aggregate_type, aggregate_id, encode(convert_to(COALESCE(payload::text, ''), 'UTF8'), 'base64'), attempts::text FROM kis_outbox WHERE service=" +
+	sql := "SELECT id::text, event_type, aggregate_type, aggregate_id, replace(encode(convert_to(COALESCE(payload::text, ''), 'UTF8'), 'base64'), E'\\n', ''), attempts::text FROM kis_outbox WHERE service=" +
 		persistenceSQLQuote(b.service) + " AND dispatched_at IS NULL AND available_at <= NOW() ORDER BY id ASC LIMIT " + strconv.Itoa(limit) + ";"
 	out, err := b.runPSQL(sql, true)
 	if err != nil {

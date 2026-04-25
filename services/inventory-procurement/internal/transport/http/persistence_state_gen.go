@@ -11,13 +11,23 @@ type persistedState struct {
 }
 
 type procurementStorePersistedState struct {
-	RequestSeq int `json:"requestSeq"`
-	OrderSeq int `json:"orderSeq"`
-	EventSeq int `json:"eventSeq"`
-	Policies []procurementPolicy `json:"policies"`
-	Requests []procurementRequest `json:"requests"`
-	Orders []purchaseOrder `json:"orders"`
-	Events []procurementEvent `json:"events"`
+	RequestSeq int                  `json:"requestSeq"`
+	OrderSeq   int                  `json:"orderSeq"`
+	EventSeq   int                  `json:"eventSeq"`
+	Policies   []procurementPolicy  `json:"policies"`
+	Requests   []procurementRequest `json:"requests"`
+	Orders     []purchaseOrder      `json:"orders"`
+	Events     []procurementEvent   `json:"events"`
+}
+
+var initialPersistedState persistedState
+
+func init() {
+	raw, err := capturePersistedState()
+	if err != nil {
+		panic(fmt.Sprintf("capture initial persisted state: %v", err))
+	}
+	initialPersistedState = mustDecodePersistedState(raw)
 }
 
 func capturePersistedState() ([]byte, error) {
@@ -25,12 +35,12 @@ func capturePersistedState() ([]byte, error) {
 	procurementStore.RLock()
 	state.ProcurementStore = procurementStorePersistedState{
 		RequestSeq: procurementStore.requestSeq,
-		OrderSeq: procurementStore.orderSeq,
-		EventSeq: procurementStore.eventSeq,
-		Policies: procurementStore.policies,
-		Requests: procurementStore.requests,
-		Orders: procurementStore.orders,
-		Events: procurementStore.events,
+		OrderSeq:   procurementStore.orderSeq,
+		EventSeq:   procurementStore.eventSeq,
+		Policies:   procurementStore.policies,
+		Requests:   procurementStore.requests,
+		Orders:     procurementStore.orders,
+		Events:     procurementStore.events,
 	}
 	procurementStore.RUnlock()
 	raw, err := json.Marshal(state)
@@ -45,9 +55,9 @@ func restorePersistedState(raw []byte) error {
 		return nil
 	}
 
-	var state persistedState
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return fmt.Errorf("unmarshal persisted state: %w", err)
+	state, err := decodePersistedState(raw)
+	if err != nil {
+		return err
 	}
 	procurementStore.Lock()
 	procurementStore.requestSeq = state.ProcurementStore.RequestSeq
@@ -62,7 +72,7 @@ func restorePersistedState(raw []byte) error {
 }
 
 func resetPersistedState() {
-	var state persistedState
+	state := clonePersistedState(initialPersistedState)
 	procurementStore.Lock()
 	procurementStore.requestSeq = state.ProcurementStore.RequestSeq
 	procurementStore.orderSeq = state.ProcurementStore.OrderSeq
@@ -72,4 +82,28 @@ func resetPersistedState() {
 	procurementStore.orders = state.ProcurementStore.Orders
 	procurementStore.events = state.ProcurementStore.Events
 	procurementStore.Unlock()
+}
+
+func decodePersistedState(raw []byte) (persistedState, error) {
+	var state persistedState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return persistedState{}, fmt.Errorf("unmarshal persisted state: %w", err)
+	}
+	return state, nil
+}
+
+func mustDecodePersistedState(raw []byte) persistedState {
+	state, err := decodePersistedState(raw)
+	if err != nil {
+		panic(err)
+	}
+	return state
+}
+
+func clonePersistedState(state persistedState) persistedState {
+	raw, err := json.Marshal(state)
+	if err != nil {
+		panic(fmt.Sprintf("marshal persisted state clone: %v", err))
+	}
+	return mustDecodePersistedState(raw)
 }

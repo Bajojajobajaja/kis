@@ -11,26 +11,38 @@ type persistedState struct {
 }
 
 type partsStorePersistedState struct {
-	Seq int `json:"seq"`
-	ProcurementSeq int `json:"procurementSeq"`
-	EventSeq int `json:"eventSeq"`
-	Usages []partsUsage `json:"usages"`
-	StockByPartCode map[string]partStock `json:"stockByPartCode"`
-	Procurements []procurementRequest `json:"procurements"`
-	Events []partsDomainEvent `json:"events"`
+	Seq             int                                 `json:"seq"`
+	ProcurementSeq  int                                 `json:"procurementSeq"`
+	EventSeq        int                                 `json:"eventSeq"`
+	Usages          []partsUsage                        `json:"usages"`
+	Plans           map[string][]workorderPartsPlanLine `json:"plans"`
+	StockByPartCode map[string]partStock                `json:"stockByPartCode"`
+	Procurements    []procurementRequest                `json:"procurements"`
+	Events          []partsDomainEvent                  `json:"events"`
+}
+
+var initialPersistedState persistedState
+
+func init() {
+	raw, err := capturePersistedState()
+	if err != nil {
+		panic(fmt.Sprintf("capture initial persisted state: %v", err))
+	}
+	initialPersistedState = mustDecodePersistedState(raw)
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	partsStore.RLock()
 	state.PartsStore = partsStorePersistedState{
-		Seq: partsStore.seq,
-		ProcurementSeq: partsStore.procurementSeq,
-		EventSeq: partsStore.eventSeq,
-		Usages: partsStore.usages,
+		Seq:             partsStore.seq,
+		ProcurementSeq:  partsStore.procurementSeq,
+		EventSeq:        partsStore.eventSeq,
+		Usages:          partsStore.usages,
+		Plans:           partsStore.plans,
 		StockByPartCode: partsStore.stockByPartCode,
-		Procurements: partsStore.procurements,
-		Events: partsStore.events,
+		Procurements:    partsStore.procurements,
+		Events:          partsStore.events,
 	}
 	partsStore.RUnlock()
 	raw, err := json.Marshal(state)
@@ -45,31 +57,69 @@ func restorePersistedState(raw []byte) error {
 		return nil
 	}
 
-	var state persistedState
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return fmt.Errorf("unmarshal persisted state: %w", err)
+	state, err := decodePersistedState(raw)
+	if err != nil {
+		return err
 	}
 	partsStore.Lock()
 	partsStore.seq = state.PartsStore.Seq
 	partsStore.procurementSeq = state.PartsStore.ProcurementSeq
 	partsStore.eventSeq = state.PartsStore.EventSeq
 	partsStore.usages = state.PartsStore.Usages
+	partsStore.plans = state.PartsStore.Plans
 	partsStore.stockByPartCode = state.PartsStore.StockByPartCode
 	partsStore.procurements = state.PartsStore.Procurements
 	partsStore.events = state.PartsStore.Events
+	if partsStore.plans == nil {
+		partsStore.plans = map[string][]workorderPartsPlanLine{}
+	}
+	if partsStore.stockByPartCode == nil {
+		partsStore.stockByPartCode = map[string]partStock{}
+	}
 	partsStore.Unlock()
 	return nil
 }
 
 func resetPersistedState() {
-	var state persistedState
+	state := clonePersistedState(initialPersistedState)
 	partsStore.Lock()
 	partsStore.seq = state.PartsStore.Seq
 	partsStore.procurementSeq = state.PartsStore.ProcurementSeq
 	partsStore.eventSeq = state.PartsStore.EventSeq
 	partsStore.usages = state.PartsStore.Usages
+	partsStore.plans = state.PartsStore.Plans
 	partsStore.stockByPartCode = state.PartsStore.StockByPartCode
 	partsStore.procurements = state.PartsStore.Procurements
 	partsStore.events = state.PartsStore.Events
+	if partsStore.plans == nil {
+		partsStore.plans = map[string][]workorderPartsPlanLine{}
+	}
+	if partsStore.stockByPartCode == nil {
+		partsStore.stockByPartCode = map[string]partStock{}
+	}
 	partsStore.Unlock()
+}
+
+func decodePersistedState(raw []byte) (persistedState, error) {
+	var state persistedState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return persistedState{}, fmt.Errorf("unmarshal persisted state: %w", err)
+	}
+	return state, nil
+}
+
+func mustDecodePersistedState(raw []byte) persistedState {
+	state, err := decodePersistedState(raw)
+	if err != nil {
+		panic(err)
+	}
+	return state
+}
+
+func clonePersistedState(state persistedState) persistedState {
+	raw, err := json.Marshal(state)
+	if err != nil {
+		panic(fmt.Sprintf("marshal persisted state clone: %v", err))
+	}
+	return mustDecodePersistedState(raw)
 }

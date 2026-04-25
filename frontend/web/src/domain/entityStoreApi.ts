@@ -4,6 +4,10 @@ type EntityStorePayload = {
   store: Record<string, EntityRecord[]>
 }
 
+type SaveEntityStoreOptions = {
+  keepalive?: boolean
+}
+
 const ENTITY_STORE_URL = '/gateway/entity-store'
 
 function ensureStore(value: unknown): Record<string, EntityRecord[]> {
@@ -26,13 +30,17 @@ export async function loadEntityStore(signal?: AbortSignal): Promise<Record<stri
   return ensureStore(payload.store)
 }
 
-export async function saveEntityStore(store: Record<string, EntityRecord[]>): Promise<void> {
+export async function saveEntityStore(
+  store: Record<string, EntityRecord[]>,
+  options: SaveEntityStoreOptions = {},
+): Promise<void> {
   const response = await fetch(ENTITY_STORE_URL, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    keepalive: options.keepalive,
     body: JSON.stringify({ store }),
   })
   if (!response.ok) {

@@ -7,6 +7,7 @@ export type SortDirection = 'asc' | 'desc'
 export type ActionKey =
   | 'create'
   | 'edit'
+  | 'delete'
   | 'archive'
   | 'close'
   | 'assign'
@@ -15,7 +16,9 @@ export type ActionKey =
   | 'writeoff'
   | 'reopen'
 
-export type Role = 'admin' | 'manager' | 'accountant' | 'viewer'
+export type AppRole = 'administrator' | 'sales' | 'mechanic' | 'analyst'
+export type AccessRole = AppRole
+export type Role = AccessRole
 
 export type StatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
 
@@ -37,7 +40,7 @@ export type EntityFieldOptionsSource = {
   sort?: 'asc' | 'none'
 }
 
-export type EntityFieldInputType = 'text' | 'select'
+export type EntityFieldInputType = 'text' | 'select' | 'date' | 'month'
 
 export type EntityCreateField = {
   key: string
@@ -64,6 +67,13 @@ export type EntityActionDefinition = {
   critical?: boolean
 }
 
+export type EntityStatusActionDefinition = {
+  key: ActionKey
+  label: string
+  nextStatus?: string
+  critical?: boolean
+}
+
 export type EntityHistoryRecord = {
   id: string
   at: string
@@ -74,6 +84,8 @@ export type EntityRelatedRecord = {
   id: string
   label: string
   value: string
+  storeKey?: string
+  recordId?: string
 }
 
 export type EntityRecord = {
@@ -95,9 +107,10 @@ export type EntityTabDefinition = {
   view: ViewMode
   columns: EntityColumn[]
   statuses: EntityStatusDefinition[]
+  hideStatusUi?: boolean
   actions: EntityActionDefinition[]
   createFields: EntityCreateField[]
-  actionStatusMap?: Partial<Record<ActionKey, string>>
+  statusActions?: Partial<Record<string, EntityStatusActionDefinition[]>>
 }
 
 export type SubsystemDefinition = {

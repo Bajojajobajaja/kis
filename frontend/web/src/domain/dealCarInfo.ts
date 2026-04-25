@@ -20,6 +20,18 @@ function normalizeVIN(value: string): string {
   return value.trim().toUpperCase()
 }
 
+function resolveCarByReference(reference: string, cars: EntityRecord[]): EntityRecord | undefined {
+  const trimmedReference = reference.trim()
+  if (!trimmedReference) {
+    return undefined
+  }
+
+  return (
+    cars.find((item) => item.id === trimmedReference) ??
+    cars.find((item) => normalizeVIN(item.values[VIN_FIELD_KEY] ?? '') === normalizeVIN(trimmedReference))
+  )
+}
+
 function toCarValueKey(rawKey: string): string {
   if (!rawKey) {
     return 'carValue'
@@ -42,8 +54,7 @@ export function enrichDealValuesWithCarInfo(
   cars: EntityRecord[],
 ): Record<string, string> {
   const next = { ...values }
-  const normalizedVIN = normalizeVIN(next[VIN_FIELD_KEY] ?? '')
-  next[VIN_FIELD_KEY] = normalizedVIN
+  const carReference = (next[VIN_FIELD_KEY] ?? '').trim()
 
   for (const key of DEAL_CAR_BASE_KEYS) {
     delete next[key]
@@ -52,14 +63,16 @@ export function enrichDealValuesWithCarInfo(
     delete next[key]
   }
 
-  if (!normalizedVIN) {
+  if (!carReference) {
     return next
   }
 
-  const car = cars.find((item) => normalizeVIN(item.values[VIN_FIELD_KEY] ?? '') === normalizedVIN)
+  const car = resolveCarByReference(carReference, cars)
   if (!car) {
     return next
   }
+
+  next[VIN_FIELD_KEY] = car.id
 
   next.carRecordId = car.id
   next.carRecordTitle = car.title
@@ -75,5 +88,24 @@ export function enrichDealValuesWithCarInfo(
   }
 
   return next
+}
+
+export function prefillDealAmountFromCarInfo(
+  previousValues: Record<string, string>,
+  nextValues: Record<string, string>,
+): Record<string, string> {
+  const previousAmount = (previousValues.amount ?? '').trim()
+  const previousCarPrice = (previousValues.carPrice ?? '').trim()
+  const nextCarPrice = (nextValues.carPrice ?? '').trim()
+
+  if (!nextCarPrice) {
+    return nextValues
+  }
+
+  if (!previousAmount || previousAmount === previousCarPrice) {
+    return { ...nextValues, amount: nextCarPrice }
+  }
+
+  return nextValues
 }
 

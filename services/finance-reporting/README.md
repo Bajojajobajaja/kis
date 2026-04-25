@@ -12,3 +12,9 @@ go run ./cmd/api
 - GET /readyz
 - GET /reports
 - POST /reports/export
+
+## Dev seed mode
+
+When `FINANCE_REPORTING_DEV_SEED_ENABLED=true`, the service enables:
+
+- `POST /dev/reset` resets in-memory finance-reporting state (exports/schedules/events and default metrics)
