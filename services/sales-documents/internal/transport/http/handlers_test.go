@@ -34,7 +34,7 @@ func TestGenerateDocument(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected status 201, got %d", rr.Code)
+		t.Fatalf("expected status 201, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	var got document
@@ -60,7 +60,7 @@ func TestGenerateContractPublishesEvent(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected status 201, got %d", rr.Code)
+		t.Fatalf("expected status 201, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	eventsReq := httptest.NewRequest(http.MethodGet, "/events?event_type=ContractIssued", nil)
@@ -90,7 +90,7 @@ func TestGenerateContractReturnsDownloadablePDF(t *testing.T) {
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected status 201, got %d", rr.Code)
+		t.Fatalf("expected status 201, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	var got document
@@ -130,7 +130,7 @@ func TestGenerateContractUpsertsBySourceDocumentID(t *testing.T) {
 	firstRR := httptest.NewRecorder()
 	mux.ServeHTTP(firstRR, firstReq)
 	if firstRR.Code != http.StatusCreated {
-		t.Fatalf("expected first status 201, got %d", firstRR.Code)
+		t.Fatalf("expected first status 201, got %d (%s)", firstRR.Code, firstRR.Body.String())
 	}
 
 	secondReq := httptest.NewRequest(http.MethodPost, "/documents/generate", strings.NewReader(body))
@@ -138,7 +138,7 @@ func TestGenerateContractUpsertsBySourceDocumentID(t *testing.T) {
 	secondRR := httptest.NewRecorder()
 	mux.ServeHTTP(secondRR, secondReq)
 	if secondRR.Code != http.StatusCreated {
-		t.Fatalf("expected second status 201, got %d", secondRR.Code)
+		t.Fatalf("expected second status 201, got %d (%s)", secondRR.Code, secondRR.Body.String())
 	}
 
 	var first document

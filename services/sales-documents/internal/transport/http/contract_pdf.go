@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -119,15 +120,35 @@ func buildSalesContractPDF(data salesContractPDFData) ([]byte, error) {
 
 func configureContractPDFFont(pdf *fpdf.Fpdf) (string, bool) {
 	regularPath, boldPath := resolveSystemTTFFonts()
-	if regularPath == "" {
+	if regularPath == "" || boldPath == "" {
 		return "Helvetica", false
 	}
 
-	pdf.AddUTF8Font("ContractFont", "", regularPath)
-	if boldPath != "" {
-		pdf.AddUTF8Font("ContractFont", "B", boldPath)
+	// go-pdf/fpdf joins font filenames with its font location, so absolute
+	// paths must be split before registration or they become broken relative paths.
+	if !registerContractPDFFont(pdf, "", regularPath) {
+		pdf.ClearError()
+		return "Helvetica", false
+	}
+	if !registerContractPDFFont(pdf, "B", boldPath) {
+		pdf.ClearError()
+		return "Helvetica", false
 	}
 	return "ContractFont", true
+}
+
+func registerContractPDFFont(pdf *fpdf.Fpdf, style, fontPath string) bool {
+	dir, file := filepath.Split(fontPath)
+	if strings.TrimSpace(file) == "" {
+		return false
+	}
+	if strings.TrimSpace(dir) == "" {
+		dir = "."
+	}
+
+	pdf.SetFontLocation(dir)
+	pdf.AddUTF8Font("ContractFont", style, file)
+	return pdf.Error() == nil
 }
 
 func resolveSystemTTFFonts() (string, string) {
