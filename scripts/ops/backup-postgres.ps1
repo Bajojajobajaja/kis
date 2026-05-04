@@ -1,5 +1,5 @@
 param(
-  [string]$OutputDir = "D:\KIS\backups\postgres",
+  [string]$OutputDir = "",
   [string]$PostgresUser = "",
   [string]$PostgresDb = ""
 )
@@ -19,7 +19,23 @@ if (-not (Test-Path $composeFile)) {
   throw "Compose file not found: $composeFile"
 }
 
-$containerId = (& docker compose -f $composeFile ps -q postgres).Trim()
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+  $OutputDir = Join-Path $repoRoot "infra\docker\postgres\backups"
+}
+
+$dockerExitCode = 0
+try {
+  $containerOutput = & docker compose -f $composeFile ps -q postgres 2>&1
+  $dockerExitCode = $LASTEXITCODE
+} catch {
+  throw "Unable to query Docker Compose for postgres container. Ensure Docker Desktop is running. Details: $($_.Exception.Message)"
+}
+
+if ($dockerExitCode -ne 0) {
+  throw "Unable to query Docker Compose for postgres container. Ensure Docker Desktop is running. Details: $($containerOutput | Out-String)"
+}
+
+$containerId = ($containerOutput | Out-String).Trim()
 if ([string]::IsNullOrWhiteSpace($containerId)) {
   throw "Postgres container is not running. Start infra first: cd infra/docker && docker compose up -d"
 }

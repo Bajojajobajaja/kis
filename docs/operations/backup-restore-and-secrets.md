@@ -25,6 +25,12 @@ Create SQL dump from running compose stack:
 powershell -File scripts/ops/backup-postgres.ps1
 ```
 
+Default output path inside the repository:
+
+```text
+infra/docker/postgres/backups
+```
+
 Custom destination:
 
 ```powershell
@@ -36,7 +42,7 @@ powershell -File scripts/ops/backup-postgres.ps1 -OutputDir "D:\KIS\backups\post
 Restore database from dump file:
 
 ```powershell
-powershell -File scripts/ops/restore-postgres.ps1 -BackupFile "D:\KIS\backups\postgres\postgres-platform-YYYYMMDD-HHMMSS.sql"
+powershell -File scripts/ops/restore-postgres.ps1 -BackupFile "infra\docker\postgres\backups\postgres-platform-YYYYMMDD-HHMMSS.sql"
 ```
 
 ## Operational notes

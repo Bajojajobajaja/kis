@@ -15,6 +15,7 @@ dist/
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # OS
 .DS_Store
@@ -33,3 +34,6 @@ services/*/.tmp/
 codex_tmp_test/
 tmp-test-write/
 .abc/
+
+# Duplicate local office files
+* (2).docx
