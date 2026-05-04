@@ -46,6 +46,16 @@ func main() {
 		result, runErr := runCoverage(module, *pkg, *tags)
 		if runErr != nil {
 			fmt.Fprintln(os.Stderr, result.output)
+			if os.Getenv("GITHUB_ACTIONS") == "true" {
+				message := fmt.Sprintf("coverage run failed in %s", filepath.ToSlash(module))
+				if tail := outputTail(result.output, 40); tail != "" {
+					message += "\n\n" + tail
+				}
+				fmt.Printf("::error title=Coverage run failed,file=%s::%s\n",
+					filepath.ToSlash(module),
+					escapeWorkflowCommand(message),
+				)
+			}
 			fmt.Fprintf(os.Stderr, "coverage run failed for %s: %v\n", filepath.ToSlash(module), runErr)
 			os.Exit(1)
 		}
@@ -85,7 +95,7 @@ func runCoverage(moduleDir, pkg, tags string) (coverageResult, error) {
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = moduleDir
-	cmd.Env = append(os.Environ(), "GOWORK=off")
+	cmd.Env = buildModuleEnv(moduleDir)
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -118,6 +128,79 @@ func parseCoverage(output string) (float64, error) {
 		return 0, fmt.Errorf("parse coverage value %q: %w", value, err)
 	}
 	return parsed, nil
+}
+
+func buildModuleEnv(moduleDir string) []string {
+	env := envMapFromList(os.Environ())
+	env["GOWORK"] = "off"
+	if hasVendorModules(moduleDir) {
+		env["GOFLAGS"] = appendGoFlag(env["GOFLAGS"], "-mod=vendor")
+	}
+	return envListFromMap(env)
+}
+
+func envMapFromList(values []string) map[string]string {
+	result := make(map[string]string, len(values))
+	for _, item := range values {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func envListFromMap(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func hasVendorModules(moduleDir string) bool {
+	info, err := os.Stat(filepath.Join(moduleDir, "vendor", "modules.txt"))
+	return err == nil && !info.IsDir()
+}
+
+func appendGoFlag(existing, flag string) string {
+	for _, item := range strings.Fields(existing) {
+		if item == flag {
+			return strings.TrimSpace(existing)
+		}
+	}
+	if strings.TrimSpace(existing) == "" {
+		return flag
+	}
+	return strings.TrimSpace(existing + " " + flag)
+}
+
+func outputTail(output string, maxLines int) string {
+	if maxLines <= 0 {
+		return ""
+	}
+	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func escapeWorkflowCommand(value string) string {
+	replacer := strings.NewReplacer(
+		"%", "%25",
+		"\r", "%0D",
+		"\n", "%0A",
+	)
+	return replacer.Replace(value)
 }
 
 func discoverModuleDirs(root string) ([]string, error) {

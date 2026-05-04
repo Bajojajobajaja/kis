@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -37,17 +39,25 @@ func main() {
 
 		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		cmd.Dir = dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		var output bytes.Buffer
+		cmd.Stdout = io.MultiWriter(os.Stdout, &output)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &output)
 		cmd.Stdin = os.Stdin
-		cmd.Env = append(os.Environ(), "GOWORK=off")
+		cmd.Env = buildModuleEnv(dir)
 
 		if err := cmd.Run(); err != nil {
+			tail := outputTail(output.String(), 40)
+			if tail != "" {
+				fmt.Fprintf(os.Stderr, "\nLast output lines for %s:\n%s\n", filepath.ToSlash(dir), tail)
+			}
 			if os.Getenv("GITHUB_ACTIONS") == "true" {
-				fmt.Printf("::error title=Module command failed,file=%s::%s failed in %s\n",
+				message := fmt.Sprintf("%s failed in %s", strings.Join(cmdArgs, " "), filepath.ToSlash(dir))
+				if tail != "" {
+					message += "\n\n" + tail
+				}
+				fmt.Printf("::error title=Module command failed,file=%s::%s\n",
 					filepath.ToSlash(dir),
-					strings.Join(cmdArgs, " "),
-					filepath.ToSlash(dir),
+					escapeWorkflowCommand(message),
 				)
 			}
 			var exitErr *exec.ExitError
@@ -58,6 +68,79 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func buildModuleEnv(moduleDir string) []string {
+	env := envMapFromList(os.Environ())
+	env["GOWORK"] = "off"
+	if hasVendorModules(moduleDir) {
+		env["GOFLAGS"] = appendGoFlag(env["GOFLAGS"], "-mod=vendor")
+	}
+	return envListFromMap(env)
+}
+
+func envMapFromList(values []string) map[string]string {
+	result := make(map[string]string, len(values))
+	for _, item := range values {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func envListFromMap(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func hasVendorModules(moduleDir string) bool {
+	info, err := os.Stat(filepath.Join(moduleDir, "vendor", "modules.txt"))
+	return err == nil && !info.IsDir()
+}
+
+func appendGoFlag(existing, flag string) string {
+	for _, item := range strings.Fields(existing) {
+		if item == flag {
+			return strings.TrimSpace(existing)
+		}
+	}
+	if strings.TrimSpace(existing) == "" {
+		return flag
+	}
+	return strings.TrimSpace(existing + " " + flag)
+}
+
+func outputTail(output string, maxLines int) string {
+	if maxLines <= 0 {
+		return ""
+	}
+	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func escapeWorkflowCommand(value string) string {
+	replacer := strings.NewReplacer(
+		"%", "%25",
+		"\r", "%0D",
+		"\n", "%0A",
+	)
+	return replacer.Replace(value)
 }
 
 func discoverModuleDirs(root string) ([]string, error) {
