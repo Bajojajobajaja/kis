@@ -42,6 +42,13 @@ func main() {
 		cmd.Stdin = os.Stdin
 
 		if err := cmd.Run(); err != nil {
+			if os.Getenv("GITHUB_ACTIONS") == "true" {
+				fmt.Printf("::error title=Module command failed,file=%s::%s failed in %s\n",
+					filepath.ToSlash(dir),
+					strings.Join(cmdArgs, " "),
+					filepath.ToSlash(dir),
+				)
+			}
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				os.Exit(exitErr.ExitCode())
