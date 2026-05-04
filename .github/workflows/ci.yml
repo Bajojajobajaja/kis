@@ -21,9 +21,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.work
+          cache-dependency-path: |
+            go.work
+            services/**/go.sum
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.63.4
 
       - name: Add Go bin to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
@@ -77,6 +80,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.work
+          cache-dependency-path: |
+            go.work
+            services/**/go.sum
 
       - name: Wait for PostgreSQL
         run: |
@@ -92,7 +98,7 @@ jobs:
           exit 1
 
       - name: DB-tagged tests
-        run: make db-test
+        run: go run ./scripts/dev/run-in-modules.go -- go test -tags db ./internal/transport/http
 
       - name: HTTP coverage threshold
-        run: make coverage-check
+        run: go run ./scripts/testing/check-http-coverage.go --threshold 55 --tags db

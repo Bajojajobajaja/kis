@@ -11,24 +11,24 @@ type persistedState struct {
 }
 
 type crmContactsStorePersistedState struct {
-	ClientSeq int `json:"clientSeq"`
-	ContactSeq int `json:"contactSeq"`
-	InteractionSeq int `json:"interactionSeq"`
-	Clients []client `json:"clients"`
-	Contacts []contact `json:"contacts"`
-	Interactions []interaction `json:"interactions"`
+	ClientSeq      int           `json:"clientSeq"`
+	ContactSeq     int           `json:"contactSeq"`
+	InteractionSeq int           `json:"interactionSeq"`
+	Clients        []client      `json:"clients"`
+	Contacts       []contact     `json:"contacts"`
+	Interactions   []interaction `json:"interactions"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	crmContactsStore.RLock()
 	state.CrmContactsStore = crmContactsStorePersistedState{
-		ClientSeq: crmContactsStore.clientSeq,
-		ContactSeq: crmContactsStore.contactSeq,
+		ClientSeq:      crmContactsStore.clientSeq,
+		ContactSeq:     crmContactsStore.contactSeq,
 		InteractionSeq: crmContactsStore.interactionSeq,
-		Clients: crmContactsStore.clients,
-		Contacts: crmContactsStore.contacts,
-		Interactions: crmContactsStore.interactions,
+		Clients:        crmContactsStore.clients,
+		Contacts:       crmContactsStore.contacts,
+		Interactions:   crmContactsStore.interactions,
 	}
 	crmContactsStore.RUnlock()
 	raw, err := json.Marshal(state)

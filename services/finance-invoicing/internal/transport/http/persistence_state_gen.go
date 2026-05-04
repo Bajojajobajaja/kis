@@ -11,12 +11,12 @@ type persistedState struct {
 }
 
 type financeInvoicingStorePersistedState struct {
-	InvoiceSeq int `json:"invoiceSeq"`
-	PaymentSeq int `json:"paymentSeq"`
-	EventSeq int `json:"eventSeq"`
-	Invoices []invoice `json:"invoices"`
-	Payments []payment `json:"payments"`
-	Events []invoicingEvent `json:"events"`
+	InvoiceSeq int              `json:"invoiceSeq"`
+	PaymentSeq int              `json:"paymentSeq"`
+	EventSeq   int              `json:"eventSeq"`
+	Invoices   []invoice        `json:"invoices"`
+	Payments   []payment        `json:"payments"`
+	Events     []invoicingEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
@@ -25,10 +25,10 @@ func capturePersistedState() ([]byte, error) {
 	state.FinanceInvoicingStore = financeInvoicingStorePersistedState{
 		InvoiceSeq: financeInvoicingStore.invoiceSeq,
 		PaymentSeq: financeInvoicingStore.paymentSeq,
-		EventSeq: financeInvoicingStore.eventSeq,
-		Invoices: financeInvoicingStore.invoices,
-		Payments: financeInvoicingStore.payments,
-		Events: financeInvoicingStore.events,
+		EventSeq:   financeInvoicingStore.eventSeq,
+		Invoices:   financeInvoicingStore.invoices,
+		Payments:   financeInvoicingStore.payments,
+		Events:     financeInvoicingStore.events,
 	}
 	financeInvoicingStore.RUnlock()
 	raw, err := json.Marshal(state)

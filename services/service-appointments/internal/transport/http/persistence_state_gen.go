@@ -11,22 +11,22 @@ type persistedState struct {
 }
 
 type appointmentStorePersistedState struct {
-	Seq int `json:"seq"`
-	EventSeq int `json:"eventSeq"`
-	Slots []slot `json:"slots"`
-	Appointments []appointment `json:"appointments"`
-	Events []appointmentEvent `json:"events"`
+	Seq          int                `json:"seq"`
+	EventSeq     int                `json:"eventSeq"`
+	Slots        []slot             `json:"slots"`
+	Appointments []appointment      `json:"appointments"`
+	Events       []appointmentEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	appointmentStore.RLock()
 	state.AppointmentStore = appointmentStorePersistedState{
-		Seq: appointmentStore.seq,
-		EventSeq: appointmentStore.eventSeq,
-		Slots: appointmentStore.slots,
+		Seq:          appointmentStore.seq,
+		EventSeq:     appointmentStore.eventSeq,
+		Slots:        appointmentStore.slots,
 		Appointments: appointmentStore.appointments,
-		Events: appointmentStore.events,
+		Events:       appointmentStore.events,
 	}
 	appointmentStore.RUnlock()
 	raw, err := json.Marshal(state)

@@ -11,24 +11,24 @@ type persistedState struct {
 }
 
 type martsStorePersistedState struct {
-	SnapshotSeq int `json:"snapshotSeq"`
-	ComplianceSeq int `json:"complianceSeq"`
-	EventSeq int `json:"eventSeq"`
-	Snapshots []martSnapshot `json:"snapshots"`
-	Compliance []complianceRun `json:"compliance"`
-	Events []martEvent `json:"events"`
+	SnapshotSeq   int             `json:"snapshotSeq"`
+	ComplianceSeq int             `json:"complianceSeq"`
+	EventSeq      int             `json:"eventSeq"`
+	Snapshots     []martSnapshot  `json:"snapshots"`
+	Compliance    []complianceRun `json:"compliance"`
+	Events        []martEvent     `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	martsStore.RLock()
 	state.MartsStore = martsStorePersistedState{
-		SnapshotSeq: martsStore.snapshotSeq,
+		SnapshotSeq:   martsStore.snapshotSeq,
 		ComplianceSeq: martsStore.complianceSeq,
-		EventSeq: martsStore.eventSeq,
-		Snapshots: martsStore.snapshots,
-		Compliance: martsStore.compliance,
-		Events: martsStore.events,
+		EventSeq:      martsStore.eventSeq,
+		Snapshots:     martsStore.snapshots,
+		Compliance:    martsStore.compliance,
+		Events:        martsStore.events,
 	}
 	martsStore.RUnlock()
 	raw, err := json.Marshal(state)

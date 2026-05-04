@@ -11,9 +11,9 @@ type persistedState struct {
 }
 
 type laborCatalogStorePersistedState struct {
-	EventSeq int `json:"eventSeq"`
-	Items []laborItem `json:"items"`
-	Events []laborCatalogEvent `json:"events"`
+	EventSeq int                 `json:"eventSeq"`
+	Items    []laborItem         `json:"items"`
+	Events   []laborCatalogEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
@@ -21,8 +21,8 @@ func capturePersistedState() ([]byte, error) {
 	laborCatalogStore.RLock()
 	state.LaborCatalogStore = laborCatalogStorePersistedState{
 		EventSeq: laborCatalogStore.eventSeq,
-		Items: laborCatalogStore.items,
-		Events: laborCatalogStore.events,
+		Items:    laborCatalogStore.items,
+		Events:   laborCatalogStore.events,
 	}
 	laborCatalogStore.RUnlock()
 	raw, err := json.Marshal(state)

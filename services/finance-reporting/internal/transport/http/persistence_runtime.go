@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -1403,7 +1404,7 @@ func (c *pgConn) authenticate(ctx context.Context, cfg pgConnConfig) error {
 		case 'Z':
 			return nil
 		case 'E':
-			return fmt.Errorf(parsePostgresError(payload))
+			return errors.New(parsePostgresError(payload))
 		default:
 			return fmt.Errorf("unexpected postgres auth message: %q", msgType)
 		}
@@ -1444,7 +1445,7 @@ func (c *pgConn) query(ctx context.Context, sqlText string) (pgQueryResult, erro
 			continue
 		case 'E':
 			if firstErr == nil {
-				firstErr = fmt.Errorf(parsePostgresError(payload))
+				firstErr = errors.New(parsePostgresError(payload))
 			}
 		case 'Z':
 			if firstErr != nil {

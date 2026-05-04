@@ -13,26 +13,26 @@ type persistedState struct {
 }
 
 type reportingStorePersistedState struct {
-	ExportSeq int `json:"exportSeq"`
-	ScheduleSeq int `json:"scheduleSeq"`
-	EventSeq int `json:"eventSeq"`
-	Exports []reportExport `json:"exports"`
-	Schedules []reportSchedule `json:"schedules"`
-	Metrics map[string]reportingMetric `json:"metrics"`
-	Events []reportingEvent `json:"events"`
+	ExportSeq   int                        `json:"exportSeq"`
+	ScheduleSeq int                        `json:"scheduleSeq"`
+	EventSeq    int                        `json:"eventSeq"`
+	Exports     []reportExport             `json:"exports"`
+	Schedules   []reportSchedule           `json:"schedules"`
+	Metrics     map[string]reportingMetric `json:"metrics"`
+	Events      []reportingEvent           `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	reportingStore.RLock()
 	state.ReportingStore = reportingStorePersistedState{
-		ExportSeq: reportingStore.exportSeq,
+		ExportSeq:   reportingStore.exportSeq,
 		ScheduleSeq: reportingStore.scheduleSeq,
-		EventSeq: reportingStore.eventSeq,
-		Exports: reportingStore.exports,
-		Schedules: reportingStore.schedules,
-		Metrics: reportingStore.metrics,
-		Events: reportingStore.events,
+		EventSeq:    reportingStore.eventSeq,
+		Exports:     reportingStore.exports,
+		Schedules:   reportingStore.schedules,
+		Metrics:     reportingStore.metrics,
+		Events:      reportingStore.events,
 	}
 	reportingStore.RUnlock()
 	raw, err := json.Marshal(state)

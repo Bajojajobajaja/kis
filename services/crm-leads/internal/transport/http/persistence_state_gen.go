@@ -11,24 +11,24 @@ type persistedState struct {
 }
 
 type crmLeadsStorePersistedState struct {
-	LeadSeq int `json:"leadSeq"`
-	ActivitySeq int `json:"activitySeq"`
-	EventSeq int `json:"eventSeq"`
-	Leads []lead `json:"leads"`
-	Activities []activity `json:"activities"`
-	Events []domainEvent `json:"events"`
+	LeadSeq     int           `json:"leadSeq"`
+	ActivitySeq int           `json:"activitySeq"`
+	EventSeq    int           `json:"eventSeq"`
+	Leads       []lead        `json:"leads"`
+	Activities  []activity    `json:"activities"`
+	Events      []domainEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	crmLeadsStore.RLock()
 	state.CrmLeadsStore = crmLeadsStorePersistedState{
-		LeadSeq: crmLeadsStore.leadSeq,
+		LeadSeq:     crmLeadsStore.leadSeq,
 		ActivitySeq: crmLeadsStore.activitySeq,
-		EventSeq: crmLeadsStore.eventSeq,
-		Leads: crmLeadsStore.leads,
-		Activities: crmLeadsStore.activities,
-		Events: crmLeadsStore.events,
+		EventSeq:    crmLeadsStore.eventSeq,
+		Leads:       crmLeadsStore.leads,
+		Activities:  crmLeadsStore.activities,
+		Events:      crmLeadsStore.events,
 	}
 	crmLeadsStore.RUnlock()
 	raw, err := json.Marshal(state)

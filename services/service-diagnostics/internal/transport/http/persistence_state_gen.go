@@ -11,10 +11,10 @@ type persistedState struct {
 }
 
 type diagnosticsStorePersistedState struct {
-	Seq int `json:"seq"`
-	EventSeq int `json:"eventSeq"`
-	Diagnostics []diagnostic `json:"diagnostics"`
-	Events []diagnosticEvent `json:"events"`
+	Seq          int                       `json:"seq"`
+	EventSeq     int                       `json:"eventSeq"`
+	Diagnostics  []diagnostic              `json:"diagnostics"`
+	Events       []diagnosticEvent         `json:"events"`
 	WarrantyData map[string]warrantyStatus `json:"warrantyData"`
 }
 
@@ -22,10 +22,10 @@ func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	diagnosticsStore.RLock()
 	state.DiagnosticsStore = diagnosticsStorePersistedState{
-		Seq: diagnosticsStore.seq,
-		EventSeq: diagnosticsStore.eventSeq,
-		Diagnostics: diagnosticsStore.diagnostics,
-		Events: diagnosticsStore.events,
+		Seq:          diagnosticsStore.seq,
+		EventSeq:     diagnosticsStore.eventSeq,
+		Diagnostics:  diagnosticsStore.diagnostics,
+		Events:       diagnosticsStore.events,
 		WarrantyData: diagnosticsStore.warrantyData,
 	}
 	diagnosticsStore.RUnlock()

@@ -11,40 +11,40 @@ type persistedState struct {
 }
 
 type biStorePersistedState struct {
-	KpiSeq int `json:"kpiSeq"`
-	SloSeq int `json:"sloSeq"`
-	AlertSeq int `json:"alertSeq"`
-	BackupSeq int `json:"backupSeq"`
-	DeliverySeq int `json:"deliverySeq"`
-	EventSeq int `json:"eventSeq"`
-	Kpis []kpiSnapshot `json:"kpis"`
-	Slos []sloDefinition `json:"slos"`
-	Alerts []alertRule `json:"alerts"`
-	Backups []backupJob `json:"backups"`
-	Runbooks []runbook `json:"runbooks"`
-	Deliveries []deliveryPlan `json:"deliveries"`
-	Finops []finopsMetric `json:"finops"`
-	Events []biEvent `json:"events"`
+	KpiSeq      int             `json:"kpiSeq"`
+	SloSeq      int             `json:"sloSeq"`
+	AlertSeq    int             `json:"alertSeq"`
+	BackupSeq   int             `json:"backupSeq"`
+	DeliverySeq int             `json:"deliverySeq"`
+	EventSeq    int             `json:"eventSeq"`
+	Kpis        []kpiSnapshot   `json:"kpis"`
+	Slos        []sloDefinition `json:"slos"`
+	Alerts      []alertRule     `json:"alerts"`
+	Backups     []backupJob     `json:"backups"`
+	Runbooks    []runbook       `json:"runbooks"`
+	Deliveries  []deliveryPlan  `json:"deliveries"`
+	Finops      []finopsMetric  `json:"finops"`
+	Events      []biEvent       `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	biStore.RLock()
 	state.BiStore = biStorePersistedState{
-		KpiSeq: biStore.kpiSeq,
-		SloSeq: biStore.sloSeq,
-		AlertSeq: biStore.alertSeq,
-		BackupSeq: biStore.backupSeq,
+		KpiSeq:      biStore.kpiSeq,
+		SloSeq:      biStore.sloSeq,
+		AlertSeq:    biStore.alertSeq,
+		BackupSeq:   biStore.backupSeq,
 		DeliverySeq: biStore.deliverySeq,
-		EventSeq: biStore.eventSeq,
-		Kpis: biStore.kpis,
-		Slos: biStore.slos,
-		Alerts: biStore.alerts,
-		Backups: biStore.backups,
-		Runbooks: biStore.runbooks,
-		Deliveries: biStore.deliveries,
-		Finops: biStore.finops,
-		Events: biStore.events,
+		EventSeq:    biStore.eventSeq,
+		Kpis:        biStore.kpis,
+		Slos:        biStore.slos,
+		Alerts:      biStore.alerts,
+		Backups:     biStore.backups,
+		Runbooks:    biStore.runbooks,
+		Deliveries:  biStore.deliveries,
+		Finops:      biStore.finops,
+		Events:      biStore.events,
 	}
 	biStore.RUnlock()
 	raw, err := json.Marshal(state)

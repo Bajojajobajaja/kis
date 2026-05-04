@@ -11,20 +11,20 @@ type persistedState struct {
 }
 
 type auditStorePersistedState struct {
-	Seq int `json:"seq"`
-	LastHash string `json:"lastHash"`
-	RetentionDays int `json:"retentionDays"`
-	Events []auditEvent `json:"events"`
+	Seq           int          `json:"seq"`
+	LastHash      string       `json:"lastHash"`
+	RetentionDays int          `json:"retentionDays"`
+	Events        []auditEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	auditStore.RLock()
 	state.AuditStore = auditStorePersistedState{
-		Seq: auditStore.seq,
-		LastHash: auditStore.lastHash,
+		Seq:           auditStore.seq,
+		LastHash:      auditStore.lastHash,
 		RetentionDays: auditStore.retentionDays,
-		Events: auditStore.events,
+		Events:        auditStore.events,
 	}
 	auditStore.RUnlock()
 	raw, err := json.Marshal(state)

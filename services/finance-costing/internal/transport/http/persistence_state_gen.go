@@ -11,24 +11,24 @@ type persistedState struct {
 }
 
 type costingStorePersistedState struct {
-	Seq int `json:"seq"`
-	ModelSeq int `json:"modelSeq"`
-	EventSeq int `json:"eventSeq"`
-	History []costingResult `json:"history"`
-	Models []costingModel `json:"models"`
-	Events []costingEvent `json:"events"`
+	Seq      int             `json:"seq"`
+	ModelSeq int             `json:"modelSeq"`
+	EventSeq int             `json:"eventSeq"`
+	History  []costingResult `json:"history"`
+	Models   []costingModel  `json:"models"`
+	Events   []costingEvent  `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	costingStore.RLock()
 	state.CostingStore = costingStorePersistedState{
-		Seq: costingStore.seq,
+		Seq:      costingStore.seq,
 		ModelSeq: costingStore.modelSeq,
 		EventSeq: costingStore.eventSeq,
-		History: costingStore.history,
-		Models: costingStore.models,
-		Events: costingStore.events,
+		History:  costingStore.history,
+		Models:   costingStore.models,
+		Events:   costingStore.events,
 	}
 	costingStore.RUnlock()
 	raw, err := json.Marshal(state)

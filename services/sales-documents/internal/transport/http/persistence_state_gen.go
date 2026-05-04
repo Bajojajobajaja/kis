@@ -11,22 +11,22 @@ type persistedState struct {
 }
 
 type salesDocsStorePersistedState struct {
-	Seq int `json:"seq"`
-	EventSeq int `json:"eventSeq"`
-	Templates []template `json:"templates"`
-	Documents []document `json:"documents"`
-	Events []salesDocEvent `json:"events"`
+	Seq       int             `json:"seq"`
+	EventSeq  int             `json:"eventSeq"`
+	Templates []template      `json:"templates"`
+	Documents []document      `json:"documents"`
+	Events    []salesDocEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	salesDocsStore.RLock()
 	state.SalesDocsStore = salesDocsStorePersistedState{
-		Seq: salesDocsStore.seq,
-		EventSeq: salesDocsStore.eventSeq,
+		Seq:       salesDocsStore.seq,
+		EventSeq:  salesDocsStore.eventSeq,
 		Templates: salesDocsStore.templates,
 		Documents: salesDocsStore.documents,
-		Events: salesDocsStore.events,
+		Events:    salesDocsStore.events,
 	}
 	salesDocsStore.RUnlock()
 	raw, err := json.Marshal(state)

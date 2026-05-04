@@ -11,15 +11,15 @@ type persistedState struct {
 }
 
 type ledgerStorePersistedState struct {
-	AccountSeq int `json:"accountSeq"`
-	EntrySeq int `json:"entrySeq"`
-	EventSeq int `json:"eventSeq"`
-	JournalSeq int `json:"journalSeq"`
-	LastHash string `json:"lastHash"`
-	Accounts []account `json:"accounts"`
-	Entries []ledgerEntry `json:"entries"`
-	Events []ledgerEvent `json:"events"`
-	Journal []journalRecord `json:"journal"`
+	AccountSeq int             `json:"accountSeq"`
+	EntrySeq   int             `json:"entrySeq"`
+	EventSeq   int             `json:"eventSeq"`
+	JournalSeq int             `json:"journalSeq"`
+	LastHash   string          `json:"lastHash"`
+	Accounts   []account       `json:"accounts"`
+	Entries    []ledgerEntry   `json:"entries"`
+	Events     []ledgerEvent   `json:"events"`
+	Journal    []journalRecord `json:"journal"`
 }
 
 func capturePersistedState() ([]byte, error) {
@@ -27,14 +27,14 @@ func capturePersistedState() ([]byte, error) {
 	ledgerStore.RLock()
 	state.LedgerStore = ledgerStorePersistedState{
 		AccountSeq: ledgerStore.accountSeq,
-		EntrySeq: ledgerStore.entrySeq,
-		EventSeq: ledgerStore.eventSeq,
+		EntrySeq:   ledgerStore.entrySeq,
+		EventSeq:   ledgerStore.eventSeq,
 		JournalSeq: ledgerStore.journalSeq,
-		LastHash: ledgerStore.lastHash,
-		Accounts: ledgerStore.accounts,
-		Entries: ledgerStore.entries,
-		Events: ledgerStore.events,
-		Journal: ledgerStore.journal,
+		LastHash:   ledgerStore.lastHash,
+		Accounts:   ledgerStore.accounts,
+		Entries:    ledgerStore.entries,
+		Events:     ledgerStore.events,
+		Journal:    ledgerStore.journal,
 	}
 	ledgerStore.RUnlock()
 	raw, err := json.Marshal(state)

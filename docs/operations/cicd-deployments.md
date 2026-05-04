@@ -1,11 +1,11 @@
 # CI/CD Deployments (Dev/Stage/Prod)
 
-Updated: 2026-02-19
+Updated: 2026-05-04
 
 ## Workflow
 
 - File: `.github/workflows/cd.yml`
-- Push to `main/master`: validate manifests and deploy to `dev`.
+- Push to `main/master`: validate manifests only.
 - Manual run (`workflow_dispatch`): deploy selected environment (`dev`, `stage`, `prod`).
 
 ## Prerequisites
@@ -21,4 +21,3 @@ Updated: 2026-02-19
 - Manifests are rendered from `infra/k8s/overlays/<environment>`.
 - `dev`, `stage`, and `prod` overlays carry environment-specific replicas, quota, and ingress hostnames.
 - Production deployment should be protected by environment approval rules.
-

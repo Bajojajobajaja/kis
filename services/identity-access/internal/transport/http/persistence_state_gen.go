@@ -11,22 +11,22 @@ type persistedState struct {
 }
 
 type identityStorePersistedState struct {
-	RoleSeq int `json:"roleSeq"`
-	PolicySeq int `json:"policySeq"`
-	Roles []role `json:"roles"`
-	Policies []policy `json:"policies"`
-	Bindings []subjectBinding `json:"bindings"`
+	RoleSeq   int              `json:"roleSeq"`
+	PolicySeq int              `json:"policySeq"`
+	Roles     []role           `json:"roles"`
+	Policies  []policy         `json:"policies"`
+	Bindings  []subjectBinding `json:"bindings"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	identityStore.RLock()
 	state.IdentityStore = identityStorePersistedState{
-		RoleSeq: identityStore.roleSeq,
+		RoleSeq:   identityStore.roleSeq,
 		PolicySeq: identityStore.policySeq,
-		Roles: identityStore.roles,
-		Policies: identityStore.policies,
-		Bindings: identityStore.bindings,
+		Roles:     identityStore.roles,
+		Policies:  identityStore.policies,
+		Bindings:  identityStore.bindings,
 	}
 	identityStore.RUnlock()
 	raw, err := json.Marshal(state)

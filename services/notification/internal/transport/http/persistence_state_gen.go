@@ -11,7 +11,7 @@ type persistedState struct {
 }
 
 type notificationStorePersistedState struct {
-	Seq int `json:"seq"`
+	Seq  int               `json:"seq"`
 	Jobs []notificationJob `json:"jobs"`
 }
 
@@ -19,7 +19,7 @@ func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	notificationStore.RLock()
 	state.NotificationStore = notificationStorePersistedState{
-		Seq: notificationStore.seq,
+		Seq:  notificationStore.seq,
 		Jobs: notificationStore.jobs,
 	}
 	notificationStore.RUnlock()

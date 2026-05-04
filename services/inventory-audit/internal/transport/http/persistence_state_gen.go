@@ -11,28 +11,28 @@ type persistedState struct {
 }
 
 type auditStorePersistedState struct {
-	TaskSeq int `json:"taskSeq"`
-	LineSeq int `json:"lineSeq"`
-	AdjustmentSeq int `json:"adjustmentSeq"`
-	EventSeq int `json:"eventSeq"`
-	Tasks []inventoryAuditTask `json:"tasks"`
-	Lines []inventoryCountLine `json:"lines"`
-	Adjustments []stockAdjustment `json:"adjustments"`
-	Events []auditEvent `json:"events"`
+	TaskSeq       int                  `json:"taskSeq"`
+	LineSeq       int                  `json:"lineSeq"`
+	AdjustmentSeq int                  `json:"adjustmentSeq"`
+	EventSeq      int                  `json:"eventSeq"`
+	Tasks         []inventoryAuditTask `json:"tasks"`
+	Lines         []inventoryCountLine `json:"lines"`
+	Adjustments   []stockAdjustment    `json:"adjustments"`
+	Events        []auditEvent         `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	auditStore.RLock()
 	state.AuditStore = auditStorePersistedState{
-		TaskSeq: auditStore.taskSeq,
-		LineSeq: auditStore.lineSeq,
+		TaskSeq:       auditStore.taskSeq,
+		LineSeq:       auditStore.lineSeq,
 		AdjustmentSeq: auditStore.adjustmentSeq,
-		EventSeq: auditStore.eventSeq,
-		Tasks: auditStore.tasks,
-		Lines: auditStore.lines,
-		Adjustments: auditStore.adjustments,
-		Events: auditStore.events,
+		EventSeq:      auditStore.eventSeq,
+		Tasks:         auditStore.tasks,
+		Lines:         auditStore.lines,
+		Adjustments:   auditStore.adjustments,
+		Events:        auditStore.events,
 	}
 	auditStore.RUnlock()
 	raw, err := json.Marshal(state)

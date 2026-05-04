@@ -37,30 +37,6 @@ jobs:
           kubectl kustomize infra/k8s/overlays/stage > /dev/null
           kubectl kustomize infra/k8s/overlays/prod > /dev/null
 
-  deploy-dev:
-    if: github.event_name == 'push'
-    needs: validate-manifests
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: v1.31.0
-
-      - name: Configure kubeconfig
-        env:
-          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_DEV }}
-        run: |
-          mkdir -p "$HOME/.kube"
-          echo "$KUBE_CONFIG_B64" | base64 -d > "$HOME/.kube/config"
-
-      - name: Apply dev overlay
-        run: kubectl apply -k infra/k8s/overlays/dev
-
   deploy-manual:
     if: github.event_name == 'workflow_dispatch'
     needs: validate-manifests

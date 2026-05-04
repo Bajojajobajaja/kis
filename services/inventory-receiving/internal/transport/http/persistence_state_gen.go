@@ -11,30 +11,30 @@ type persistedState struct {
 }
 
 type receivingStorePersistedState struct {
-	ReceiptSeq int `json:"receiptSeq"`
-	LineSeq int `json:"lineSeq"`
-	DiscrepancySeq int `json:"discrepancySeq"`
-	TaskSeq int `json:"taskSeq"`
-	EventSeq int `json:"eventSeq"`
-	Receipts []receipt `json:"receipts"`
-	Discrepancies []discrepancy `json:"discrepancies"`
-	Tasks []warehouseTask `json:"tasks"`
-	Events []receivingEvent `json:"events"`
+	ReceiptSeq     int              `json:"receiptSeq"`
+	LineSeq        int              `json:"lineSeq"`
+	DiscrepancySeq int              `json:"discrepancySeq"`
+	TaskSeq        int              `json:"taskSeq"`
+	EventSeq       int              `json:"eventSeq"`
+	Receipts       []receipt        `json:"receipts"`
+	Discrepancies  []discrepancy    `json:"discrepancies"`
+	Tasks          []warehouseTask  `json:"tasks"`
+	Events         []receivingEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	receivingStore.RLock()
 	state.ReceivingStore = receivingStorePersistedState{
-		ReceiptSeq: receivingStore.receiptSeq,
-		LineSeq: receivingStore.lineSeq,
+		ReceiptSeq:     receivingStore.receiptSeq,
+		LineSeq:        receivingStore.lineSeq,
 		DiscrepancySeq: receivingStore.discrepancySeq,
-		TaskSeq: receivingStore.taskSeq,
-		EventSeq: receivingStore.eventSeq,
-		Receipts: receivingStore.receipts,
-		Discrepancies: receivingStore.discrepancies,
-		Tasks: receivingStore.tasks,
-		Events: receivingStore.events,
+		TaskSeq:        receivingStore.taskSeq,
+		EventSeq:       receivingStore.eventSeq,
+		Receipts:       receivingStore.receipts,
+		Discrepancies:  receivingStore.discrepancies,
+		Tasks:          receivingStore.tasks,
+		Events:         receivingStore.events,
 	}
 	receivingStore.RUnlock()
 	raw, err := json.Marshal(state)

@@ -11,24 +11,24 @@ type persistedState struct {
 }
 
 type catalogStorePersistedState struct {
-	CarSeq int `json:"carSeq"`
-	PartSeq int `json:"partSeq"`
-	EventSeq int `json:"eventSeq"`
-	Cars []carModel `json:"cars"`
-	Parts []partItem `json:"parts"`
-	Events []catalogEvent `json:"events"`
+	CarSeq   int            `json:"carSeq"`
+	PartSeq  int            `json:"partSeq"`
+	EventSeq int            `json:"eventSeq"`
+	Cars     []carModel     `json:"cars"`
+	Parts    []partItem     `json:"parts"`
+	Events   []catalogEvent `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
 	state := persistedState{}
 	catalogStore.RLock()
 	state.CatalogStore = catalogStorePersistedState{
-		CarSeq: catalogStore.carSeq,
-		PartSeq: catalogStore.partSeq,
+		CarSeq:   catalogStore.carSeq,
+		PartSeq:  catalogStore.partSeq,
 		EventSeq: catalogStore.eventSeq,
-		Cars: catalogStore.cars,
-		Parts: catalogStore.parts,
-		Events: catalogStore.events,
+		Cars:     catalogStore.cars,
+		Parts:    catalogStore.parts,
+		Events:   catalogStore.events,
 	}
 	catalogStore.RUnlock()
 	raw, err := json.Marshal(state)

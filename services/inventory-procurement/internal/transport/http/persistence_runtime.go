@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -177,11 +178,23 @@ func WrapWithPersistence(service string, next http.Handler) (http.Handler, error
 	if persistenceBoolEnvOrDefault("OUTBOX_DISPATCH_ENABLED", true) && len(m.outboxTargets) > 0 {
 		m.startOutboxDispatcher()
 	}
-	if err := m.replayJournal(); err != nil {
+	restored, err := m.restoreStateSnapshot()
+	if err != nil {
 		if strict {
-			return nil, fmt.Errorf("journal replay failed: %w", err)
+			return nil, fmt.Errorf("restore persisted state: %w", err)
 		}
-		log.Printf("journal replay failed for %s: %v", service, err)
+		log.Printf("persisted state restore failed for %s: %v", service, err)
+	}
+	if !restored {
+		if err := m.replayJournal(); err != nil {
+			if strict {
+				return nil, fmt.Errorf("journal replay failed: %w", err)
+			}
+			log.Printf("journal replay failed for %s: %v", service, err)
+		}
+	}
+	if err := m.saveStateSnapshot(); err != nil {
+		log.Printf("persisted state snapshot failed for %s: %v", service, err)
 	}
 	return m, nil
 }
@@ -262,6 +275,8 @@ func (m *persistenceMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request
 			return
 		}
 		log.Printf("persistence write failed for %s: %v", m.service, err)
+	} else if err := m.saveStateSnapshot(); err != nil {
+		log.Printf("persisted state snapshot failed for %s: %v", m.service, err)
 	}
 
 	recorder.WriteTo(w)
@@ -486,6 +501,27 @@ func (m *persistenceMiddleware) replayJournal() error {
 	return nil
 }
 
+func (m *persistenceMiddleware) restoreStateSnapshot() (bool, error) {
+	raw, err := m.backend.loadState()
+	if err != nil {
+		return false, err
+	}
+	if len(raw) == 0 {
+		return false, nil
+	}
+	if err := restorePersistedState(raw); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (m *persistenceMiddleware) saveStateSnapshot() error {
+	raw, err := capturePersistedState()
+	if err != nil {
+		return err
+	}
+	return m.backend.saveState(raw)
+}
 func newPersistenceBackend(service string) (*persistenceBackend, error) {
 	service = strings.TrimSpace(service)
 	if service == "" {
@@ -663,6 +699,13 @@ func (b *persistenceBackend) loadState() ([]byte, error) {
 	return decoded, nil
 }
 
+func (b *persistenceBackend) saveState(raw []byte) error {
+	sql := "INSERT INTO kis_service_state(service, state_json, updated_at) VALUES(" +
+		persistenceSQLQuote(b.service) + ", " +
+		persistenceJSONExprFromBytes(raw) + ", NOW()) ON CONFLICT(service) DO UPDATE SET state_json=EXCLUDED.state_json, updated_at=NOW();"
+	_, err := b.runPSQL(sql, false)
+	return err
+}
 func (b *persistenceBackend) listCommands() ([]persistedCommand, error) {
 	query := "SELECT id::text, method, path, query, actor_id, trace_id, replace(encode(convert_to(COALESCE(request_json::text, ''), 'UTF8'), 'base64'), E'\\n', '') FROM kis_http_journal WHERE service=" +
 		persistenceSQLQuote(b.service) + " ORDER BY id ASC;"
@@ -1313,7 +1356,7 @@ func (c *pgConn) authenticate(ctx context.Context, cfg pgConnConfig) error {
 		case 'Z':
 			return nil
 		case 'E':
-			return fmt.Errorf(parsePostgresError(payload))
+			return errors.New(parsePostgresError(payload))
 		default:
 			return fmt.Errorf("unexpected postgres auth message: %q", msgType)
 		}
@@ -1354,7 +1397,7 @@ func (c *pgConn) query(ctx context.Context, sqlText string) (pgQueryResult, erro
 			continue
 		case 'E':
 			if firstErr == nil {
-				firstErr = fmt.Errorf(parsePostgresError(payload))
+				firstErr = errors.New(parsePostgresError(payload))
 			}
 		case 'Z':
 			if firstErr != nil {

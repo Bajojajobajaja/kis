@@ -11,14 +11,14 @@ type persistedState struct {
 }
 
 type billingStorePersistedState struct {
-	InvoiceSeq int `json:"invoiceSeq"`
-	ActSeq int `json:"actSeq"`
-	PaymentSeq int `json:"paymentSeq"`
-	EventSeq int `json:"eventSeq"`
-	Invoices []serviceInvoice `json:"invoices"`
-	Acts []completionAct `json:"acts"`
-	Payments []servicePayment `json:"payments"`
-	Events []billingEvent `json:"events"`
+	InvoiceSeq int              `json:"invoiceSeq"`
+	ActSeq     int              `json:"actSeq"`
+	PaymentSeq int              `json:"paymentSeq"`
+	EventSeq   int              `json:"eventSeq"`
+	Invoices   []serviceInvoice `json:"invoices"`
+	Acts       []completionAct  `json:"acts"`
+	Payments   []servicePayment `json:"payments"`
+	Events     []billingEvent   `json:"events"`
 }
 
 func capturePersistedState() ([]byte, error) {
@@ -26,13 +26,13 @@ func capturePersistedState() ([]byte, error) {
 	billingStore.RLock()
 	state.BillingStore = billingStorePersistedState{
 		InvoiceSeq: billingStore.invoiceSeq,
-		ActSeq: billingStore.actSeq,
+		ActSeq:     billingStore.actSeq,
 		PaymentSeq: billingStore.paymentSeq,
-		EventSeq: billingStore.eventSeq,
-		Invoices: billingStore.invoices,
-		Acts: billingStore.acts,
-		Payments: billingStore.payments,
-		Events: billingStore.events,
+		EventSeq:   billingStore.eventSeq,
+		Invoices:   billingStore.invoices,
+		Acts:       billingStore.acts,
+		Payments:   billingStore.payments,
+		Events:     billingStore.events,
 	}
 	billingStore.RUnlock()
 	raw, err := json.Marshal(state)
