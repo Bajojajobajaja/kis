@@ -1,7 +1,8 @@
 param(
   [string]$OutputDir = "",
   [string]$PostgresUser = "",
-  [string]$PostgresDb = ""
+  [string]$PostgresDb = "",
+  [switch]$AllDatabases
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +10,7 @@ $ErrorActionPreference = "Stop"
 if ([string]::IsNullOrWhiteSpace($PostgresUser)) {
   $PostgresUser = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { "kis" }
 }
-if ([string]::IsNullOrWhiteSpace($PostgresDb)) {
+if (-not $AllDatabases -and [string]::IsNullOrWhiteSpace($PostgresDb)) {
   $PostgresDb = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { "platform" }
 }
 
@@ -42,11 +43,18 @@ if ([string]::IsNullOrWhiteSpace($containerId)) {
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$backupFile = Join-Path $OutputDir "postgres-$PostgresDb-$timestamp.sql"
-$stderrFile = Join-Path $OutputDir "postgres-$PostgresDb-$timestamp.stderr.log"
+$backupTarget = if ($AllDatabases) { "cluster" } else { $PostgresDb }
+$backupFile = Join-Path $OutputDir "postgres-$backupTarget-$timestamp.sql"
+$stderrFile = Join-Path $OutputDir "postgres-$backupTarget-$timestamp.stderr.log"
+
+$dumpArgs = if ($AllDatabases) {
+  @("exec", $containerId, "pg_dumpall", "-U", $PostgresUser)
+} else {
+  @("exec", $containerId, "pg_dump", "-U", $PostgresUser, "-d", $PostgresDb)
+}
 
 $process = Start-Process -FilePath "docker" `
-  -ArgumentList @("exec", $containerId, "pg_dump", "-U", $PostgresUser, "-d", $PostgresDb) `
+  -ArgumentList $dumpArgs `
   -RedirectStandardOutput $backupFile `
   -RedirectStandardError $stderrFile `
   -NoNewWindow `

@@ -31,6 +31,13 @@ Default output path inside the repository:
 infra/docker/postgres/backups
 ```
 
+For a full repo snapshot in the `database-per-service` architecture, dump the
+entire cluster:
+
+```powershell
+powershell -File scripts/ops/backup-postgres.ps1 -AllDatabases
+```
+
 Custom destination:
 
 ```powershell
@@ -43,6 +50,12 @@ Restore database from dump file:
 
 ```powershell
 powershell -File scripts/ops/restore-postgres.ps1 -BackupFile "infra\docker\postgres\backups\postgres-platform-YYYYMMDD-HHMMSS.sql"
+```
+
+Restore a full-cluster dump:
+
+```powershell
+powershell -File scripts/ops/restore-postgres.ps1 -BackupFile "infra\docker\postgres\backups\postgres-cluster-YYYYMMDD-HHMMSS.sql" -AllDatabases
 ```
 
 ## Operational notes

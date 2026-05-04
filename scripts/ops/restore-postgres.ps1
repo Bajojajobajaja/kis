@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$BackupFile,
   [string]$PostgresUser = "",
-  [string]$PostgresDb = ""
+  [string]$PostgresDb = "",
+  [switch]$AllDatabases
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +15,7 @@ if (-not (Test-Path $BackupFile)) {
 if ([string]::IsNullOrWhiteSpace($PostgresUser)) {
   $PostgresUser = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { "kis" }
 }
-if ([string]::IsNullOrWhiteSpace($PostgresDb)) {
+if (-not $AllDatabases -and [string]::IsNullOrWhiteSpace($PostgresDb)) {
   $PostgresDb = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { "platform" }
 }
 
@@ -42,9 +43,10 @@ if ([string]::IsNullOrWhiteSpace($containerId)) {
 }
 
 $stderrFile = Join-Path (Split-Path $BackupFile -Parent) "restore.stderr.log"
+$restoreDb = if ($AllDatabases) { "postgres" } else { $PostgresDb }
 
 $process = Start-Process -FilePath "docker" `
-  -ArgumentList @("exec", "-i", $containerId, "psql", "-U", $PostgresUser, "-d", $PostgresDb) `
+  -ArgumentList @("exec", "-i", $containerId, "psql", "-U", $PostgresUser, "-d", $restoreDb) `
   -RedirectStandardInput $BackupFile `
   -RedirectStandardError $stderrFile `
   -NoNewWindow `
