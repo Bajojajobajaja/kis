@@ -44,7 +44,7 @@ jobs:
         run: go run ./scripts/dev/run-in-modules.go -- golangci-lint run ./...
 
       - name: Test
-        run: go run ./scripts/dev/run-in-modules.go -- go test ./...
+        run: go run ./scripts/dev/run-in-modules.go -- go test -count=1 -v ./...
 
       - name: Build
         run: go run ./scripts/dev/run-in-modules.go -- go build ./...
@@ -98,7 +98,7 @@ jobs:
           exit 1
 
       - name: DB-tagged tests
-        run: go run ./scripts/dev/run-in-modules.go -- go test -tags db ./internal/transport/http
+        run: go run ./scripts/dev/run-in-modules.go -- go test -count=1 -v -tags db ./internal/transport/http
 
       - name: HTTP coverage threshold
         run: go run ./scripts/testing/check-http-coverage.go --threshold 55 --tags db
