@@ -40,6 +40,7 @@ func main() {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
+		cmd.Env = append(os.Environ(), "GOWORK=off")
 
 		if err := cmd.Run(); err != nil {
 			if os.Getenv("GITHUB_ACTIONS") == "true" {

@@ -85,6 +85,7 @@ func runCoverage(moduleDir, pkg, tags string) (coverageResult, error) {
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = moduleDir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
