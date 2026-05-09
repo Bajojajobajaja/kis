@@ -230,7 +230,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/analytics-marts
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://reporting-bi:8080,http://notification:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19080:8080"
 
@@ -254,7 +257,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/crm-contacts
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19083:8080"
 
@@ -262,7 +268,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/crm-leads
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://sales-deals:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19084:8080"
 
@@ -270,7 +279,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/finance-costing
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-reporting:8080,http://analytics-marts:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19085:8080"
 
@@ -278,7 +290,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/finance-invoicing
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-ledger:8080,http://analytics-marts:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19086:8080"
 
@@ -286,7 +301,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/finance-ledger
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-reporting:8080,http://analytics-marts:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19087:8080"
 
@@ -294,7 +312,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/finance-reporting
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://analytics-marts:8080,http://notification:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19088:8080"
 
@@ -302,7 +323,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/identity-access
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19089:8080"
 
@@ -310,7 +334,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/inventory-audit
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://inventory-stock:8080,http://finance-ledger:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19090:8080"
 
@@ -318,7 +345,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/inventory-procurement
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://inventory-receiving:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19091:8080"
 
@@ -326,7 +356,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/inventory-receiving
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://inventory-stock:8080,http://finance-ledger:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19092:8080"
 
@@ -334,7 +367,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/inventory-stock
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-ledger:8080,http://analytics-marts:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19093:8080"
 
@@ -342,7 +378,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/masterdata-catalog
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19094:8080"
 
@@ -358,7 +397,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/pricing
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19096:8080"
 
@@ -374,7 +416,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/sales-deals
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://inventory-stock:8080,http://finance-ledger:8080,http://sales-documents:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19098:8080"
 
@@ -382,7 +427,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/sales-documents
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-invoicing:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19099:8080"
 
@@ -390,7 +438,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/service-appointments
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://service-workorders:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19100:8080"
 
@@ -398,7 +449,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/service-billing
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://finance-invoicing:8080,http://finance-ledger:8080,http://analytics-marts:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19101:8080"
 
@@ -406,7 +460,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/service-diagnostics
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://service-workorders:8080,http://service-parts-usage:8080,http://notification:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19102:8080"
 
@@ -422,7 +479,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/service-parts-usage
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://inventory-stock:8080,http://inventory-procurement:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19104:8080"
 
@@ -430,7 +490,10 @@ services:
     <<: *svc-common
     build:
       context: ../../services/service-workorders
-    environment: *svc-env
+    environment:
+      <<: *svc-env
+      OUTBOX_TARGETS: "http://service-parts-usage:8080,http://service-billing:8080,http://notification:8080,http://audit-log:8080"
+      OUTBOX_DISPATCH_ENABLED: "true"
     ports:
       - "19105:8080"
 
