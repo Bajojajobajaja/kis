@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 
 import { StatusBadge } from '../components'
@@ -37,6 +37,27 @@ type DomainCard = {
   value: string
   caption: string
   note: string
+  to: string
+}
+
+const sourceCardLinks: Record<string, string> = {
+  finance: '/finance/documents',
+  sales: '/crm-sales/documents',
+  service: '/service/documents',
+  inventory: '/inventory/documents',
+}
+
+const sourceCardLabels: Record<string, string> = {
+  finance: 'Финансы',
+  sales: 'Продажи',
+  service: 'Сервис',
+  inventory: 'Склад',
+}
+
+const interactiveLinkStyle: CSSProperties = {
+  display: 'contents',
+  color: 'inherit',
+  textDecoration: 'none',
 }
 
 type ExposureInvoice = {
@@ -327,6 +348,13 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
     ],
   )
 
+  const orderRecords = getRecords('service/orders')
+  const purchaseRecords = getRecords('inventory/purchases')
+  const dealsTab = getSubsystemBySlug('crm-sales')?.tabs.find((tab) => tab.slug === 'deals')
+  const ordersTab = getSubsystemBySlug('service')?.tabs.find((tab) => tab.slug === 'orders')
+  const purchasesTab = getSubsystemBySlug('inventory')?.tabs.find((tab) => tab.slug === 'purchases')
+  const paymentsTab = subsystem?.tabs.find((tab) => tab.slug === 'payments')
+
   const exposureInvoices = useMemo<ExposureInvoice[]>(
     () =>
       invoiceRecords
@@ -344,6 +372,10 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
   const topDemandModels = carDemand.models.slice(0, 5)
   const topDemandVehicles = carDemand.vehicles.slice(0, 4)
   const topDemandParts = partsDemand.slice(0, 5)
+  const latestDeals = dealRecords.slice(0, 5)
+  const latestOrders = orderRecords.slice(0, 5)
+  const latestPurchases = purchaseRecords.slice(0, 5)
+  const latestPayments = paymentRecords.slice(0, 5)
 
   const domainCards: DomainCard[] = [
     {
@@ -352,6 +384,7 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
       value: formatMoney(summary.salesRevenue),
       caption: 'Выручка по закрытым сделкам',
       note: `${formatCount(summary.salesClosedDealsCount)} закрытых сделок, документов: ${formatCount(summary.sourceDocumentCounts.sales)}`,
+      to: '/crm-sales/deals',
     },
     {
       key: 'service',
@@ -363,6 +396,7 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
         : partsDemandError
           ? partsDemandError
           : `${formatCount(summary.serviceDemandOperations)} операций writeoff, документов: ${formatCount(summary.sourceDocumentCounts.service)}`,
+      to: '/service/orders',
     },
     {
       key: 'inventory',
@@ -370,6 +404,7 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
       value: formatMoney(summary.apOpenTotal),
       caption: 'Открытая кредиторка',
       note: `${formatCount(summary.inventoryAttentionCount)} позиций с низким или критичным остатком, документов: ${formatCount(summary.sourceDocumentCounts.inventory)}`,
+      to: '/inventory/stock',
     },
   ]
 
@@ -591,12 +626,14 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
 
           <div className="finance-analytics__domain-list">
             {domainCards.map((card) => (
-              <article key={card.key} className="finance-analytics__domain-card">
-                <span>{card.title}</span>
-                <strong>{card.value}</strong>
-                <p>{card.caption}</p>
-                <small>{card.note}</small>
-              </article>
+              <Link key={card.key} to={card.to} style={interactiveLinkStyle}>
+                <article className="finance-analytics__domain-card">
+                  <span>{card.title}</span>
+                  <strong>{card.value}</strong>
+                  <p>{card.caption}</p>
+                  <small>{card.note}</small>
+                </article>
+              </Link>
             ))}
           </div>
         </article>
@@ -685,14 +722,16 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
                 const statusMeta = resolveStatusMeta(invoicesTab, record.status)
                 return (
                   <li key={record.id} className="finance-analytics__signal-item">
-                    <div>
-                      <strong>{record.id}</strong>
-                      <p>{record.subtitle}</p>
-                    </div>
-                    <div className="finance-analytics__signal-meta">
-                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
-                      <span>{formatMoney(openAmount)}</span>
-                    </div>
+                    <Link to={`/finance/invoices/${record.id}`} style={interactiveLinkStyle}>
+                      <div>
+                        <strong>{record.id}</strong>
+                        <p>{record.subtitle}</p>
+                      </div>
+                      <div className="finance-analytics__signal-meta">
+                        <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                        <span>{formatMoney(openAmount)}</span>
+                      </div>
+                    </Link>
                   </li>
                 )
               })}
@@ -719,14 +758,16 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
                   const statusMeta = resolveStatusMeta(reportsTab, report.status)
                   return (
                     <li key={report.id} className="finance-analytics__signal-item">
-                      <div>
-                        <strong>{report.title}</strong>
-                        <p>
-                          {report.subtitle ||
-                            `${report.values.period ?? ''} • ${report.values.format ?? ''}`}
-                        </p>
-                      </div>
-                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                      <Link to={`/finance/reports/${report.id}`} style={interactiveLinkStyle}>
+                        <div>
+                          <strong>{report.title}</strong>
+                          <p>
+                            {report.subtitle ||
+                              `${report.values.period ?? ''} • ${report.values.format ?? ''}`}
+                          </p>
+                        </div>
+                        <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                      </Link>
                     </li>
                   )
                 })}
@@ -744,24 +785,166 @@ export function FinanceAnalyticsDashboard({ item }: { item: SubsystemNavItem }) 
           <div className="finance-analytics__subsection">
             <p className="finance-analytics__subheading">Источники документов</p>
             <div className="finance-analytics__source-grid">
-              <div className="finance-analytics__source-card">
-                <span>Финансы</span>
-                <strong>{formatCount(summary.sourceDocumentCounts.finance)}</strong>
-              </div>
-              <div className="finance-analytics__source-card">
-                <span>Продажи</span>
-                <strong>{formatCount(summary.sourceDocumentCounts.sales)}</strong>
-              </div>
-              <div className="finance-analytics__source-card">
-                <span>Сервис</span>
-                <strong>{formatCount(summary.sourceDocumentCounts.service)}</strong>
-              </div>
-              <div className="finance-analytics__source-card">
-                <span>Склад</span>
-                <strong>{formatCount(summary.sourceDocumentCounts.inventory)}</strong>
-              </div>
+              {(['finance', 'sales', 'service', 'inventory'] as const).map((sourceKey) => (
+                <Link key={sourceKey} to={sourceCardLinks[sourceKey]} style={interactiveLinkStyle}>
+                  <div className="finance-analytics__source-card">
+                    <span>{sourceCardLabels[sourceKey]}</span>
+                    <strong>{formatCount(summary.sourceDocumentCounts[sourceKey])}</strong>
+                  </div>
+                </Link>
+              ))}
             </div>
           </div>
+        </article>
+      </div>
+
+      <div className="finance-analytics__grid">
+        <article className="finance-analytics__panel">
+          <div className="finance-analytics__panel-head">
+            <div>
+              <p className="finance-analytics__panel-tag">Продажи</p>
+              <h4>Последние сделки</h4>
+            </div>
+            <Link to="/crm-sales/deals" style={interactiveLinkStyle}>
+              <span className="finance-analytics__panel-tag" style={{ cursor: 'pointer' }}>
+                Все сделки →
+              </span>
+            </Link>
+          </div>
+          {latestDeals.length === 0 ? (
+            renderEmpty('Сделок пока нет.')
+          ) : (
+            <ul className="finance-analytics__signal-list">
+              {latestDeals.map((deal) => {
+                const statusMeta = resolveStatusMeta(dealsTab, deal.status)
+                return (
+                  <li key={deal.id} className="finance-analytics__signal-item">
+                    <Link to={`/crm-sales/deals/${deal.id}`} style={interactiveLinkStyle}>
+                      <div>
+                        <strong>{deal.title}</strong>
+                        <p>
+                          {deal.id} • {formatMoney(parseMoney(deal.values.amount))}
+                        </p>
+                      </div>
+                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </article>
+
+        <article className="finance-analytics__panel">
+          <div className="finance-analytics__panel-head">
+            <div>
+              <p className="finance-analytics__panel-tag">Сервис</p>
+              <h4>Последние заказ-наряды</h4>
+            </div>
+            <Link to="/service/orders" style={interactiveLinkStyle}>
+              <span className="finance-analytics__panel-tag" style={{ cursor: 'pointer' }}>
+                Все заказ-наряды →
+              </span>
+            </Link>
+          </div>
+          {latestOrders.length === 0 ? (
+            renderEmpty('Заказ-нарядов пока нет.')
+          ) : (
+            <ul className="finance-analytics__signal-list">
+              {latestOrders.map((order) => {
+                const statusMeta = resolveStatusMeta(ordersTab, order.status)
+                return (
+                  <li key={order.id} className="finance-analytics__signal-item">
+                    <Link to={`/service/orders/${order.id}`} style={interactiveLinkStyle}>
+                      <div>
+                        <strong>{order.title}</strong>
+                        <p>
+                          {order.id} • {(order.values.master ?? '').trim() || '—'}
+                        </p>
+                      </div>
+                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </article>
+      </div>
+
+      <div className="finance-analytics__grid">
+        <article className="finance-analytics__panel">
+          <div className="finance-analytics__panel-head">
+            <div>
+              <p className="finance-analytics__panel-tag">Склад</p>
+              <h4>Последние закупки</h4>
+            </div>
+            <Link to="/inventory/purchases" style={interactiveLinkStyle}>
+              <span className="finance-analytics__panel-tag" style={{ cursor: 'pointer' }}>
+                Все закупки →
+              </span>
+            </Link>
+          </div>
+          {latestPurchases.length === 0 ? (
+            renderEmpty('Закупок пока нет.')
+          ) : (
+            <ul className="finance-analytics__signal-list">
+              {latestPurchases.map((purchase) => {
+                const statusMeta = resolveStatusMeta(purchasesTab, purchase.status)
+                return (
+                  <li key={purchase.id} className="finance-analytics__signal-item">
+                    <Link to={`/inventory/purchases/${purchase.id}`} style={interactiveLinkStyle}>
+                      <div>
+                        <strong>{purchase.title}</strong>
+                        <p>
+                          {purchase.id} • {(purchase.values.supplier ?? '').trim() || '—'} •{' '}
+                          {formatMoney(parseMoney(purchase.values.amount))}
+                        </p>
+                      </div>
+                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </article>
+
+        <article className="finance-analytics__panel">
+          <div className="finance-analytics__panel-head">
+            <div>
+              <p className="finance-analytics__panel-tag">Финансы</p>
+              <h4>Последние платежи</h4>
+            </div>
+            <Link to="/finance/payments" style={interactiveLinkStyle}>
+              <span className="finance-analytics__panel-tag" style={{ cursor: 'pointer' }}>
+                Все платежи →
+              </span>
+            </Link>
+          </div>
+          {latestPayments.length === 0 ? (
+            renderEmpty('Платежей пока нет.')
+          ) : (
+            <ul className="finance-analytics__signal-list">
+              {latestPayments.map((payment) => {
+                const statusMeta = resolveStatusMeta(paymentsTab, payment.status)
+                return (
+                  <li key={payment.id} className="finance-analytics__signal-item">
+                    <Link to={`/finance/payments/${payment.id}`} style={interactiveLinkStyle}>
+                      <div>
+                        <strong>{payment.title}</strong>
+                        <p>
+                          {payment.id} • {(payment.values.invoice ?? '').trim() || '—'} •{' '}
+                          {formatMoney(parseMoney(payment.values.amount))}
+                        </p>
+                      </div>
+                      <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </article>
       </div>
     </section>

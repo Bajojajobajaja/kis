@@ -274,10 +274,12 @@ export function formatFinanceInvoiceDirection(direction: string): string {
 export function normalizeFinanceInvoiceValues(values: Record<string, string>): Record<string, string> {
   const amount = formatMoneyString(values.amount ?? '')
   const paidAmount = formatMoneyString(values.paidAmount ?? '') || '0'
+  const dueDate = (values.dueDate ?? '').trim() || new Date().toISOString().slice(0, 10)
   return {
     ...values,
     amount,
     paidAmount,
+    dueDate,
     direction: (values.direction ?? '').trim() || 'outgoing',
   }
 }

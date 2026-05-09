@@ -59,8 +59,8 @@ export const platformRoleRecordIds: Record<AccessRole, string> = {
 
 const roleSubsystemAccess: Record<AccessRole, SubsystemSlug[]> = {
   administrator: ['crm-sales', 'service', 'inventory', 'finance', 'platform'],
-  sales: ['crm-sales'],
-  mechanic: ['service', 'inventory'],
+  sales: ['crm-sales', 'finance'],
+  mechanic: ['service', 'inventory', 'finance'],
   analyst: ['finance'],
 }
 
@@ -96,8 +96,8 @@ export const accessRolePermissionProfiles: Record<AccessRole, string> = {
 
 export const accessRoleSubsystemSummaries: Record<AccessRole, string> = {
   administrator: 'CRM, Сервис, Склад, Финансы, Платформа',
-  sales: 'CRM',
-  mechanic: 'Сервис, Склад',
+  sales: 'CRM, Финансы',
+  mechanic: 'Сервис, Склад, Финансы',
   analyst: 'Финансы',
 }
 
@@ -175,11 +175,11 @@ export function canAccessStore(role: AccessRole, storeKey: string): boolean {
   return subsystemSlug ? canAccessSubsystem(role, subsystemSlug) : false
 }
 
-function isStoreReadOnlyForRole(role: AccessRole, storeKey: EntityStoreKey): boolean {
+function isStoreReadOnlyForRole(_role: AccessRole, storeKey: EntityStoreKey): boolean {
   if (storeKey === 'platform/roles') {
     return true
   }
-  return role === 'analyst' && storeKey.startsWith('finance/') && storeKey !== 'finance/reports'
+  return false
 }
 
 export function canRolePerform(
@@ -201,7 +201,13 @@ export function canRolePerform(
     return mechanicActions.includes(action)
   }
   if (role === 'analyst') {
-    return storeKey === 'finance/reports' && analystReportActions.includes(action)
+    if (storeKey === 'finance/reports') {
+      return analystReportActions.includes(action)
+    }
+    if (storeKey.startsWith('finance/')) {
+      return workingActions.includes(action)
+    }
+    return false
   }
   return false
 }
@@ -222,10 +228,6 @@ export function getActionDeniedReason(
 
   if (storeKey === 'platform/roles') {
     return 'Каталог системных ролей доступен только для просмотра.'
-  }
-
-  if (role === 'analyst' && storeKey.startsWith('finance/')) {
-    return 'Роль "Аналитик" может изменять только отчеты и аналитику финансов.'
   }
 
   return `У роли "${accessRoleLabels[role]}" нет права на ${actionLabels[action]}.`

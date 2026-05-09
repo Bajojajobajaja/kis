@@ -83,10 +83,6 @@ export function enrichDealValuesWithCarInfo(
     next[toCarValueKey(rawKey)] = rawValue
   }
 
-  if (!next.client?.trim() && car.values.ownerClient?.trim()) {
-    next.client = car.values.ownerClient.trim()
-  }
-
   return next
 }
 

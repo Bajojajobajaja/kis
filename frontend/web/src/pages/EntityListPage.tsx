@@ -40,14 +40,18 @@ import {
   FINANCE_INVOICES_STORE_KEY,
   FINANCE_PAYMENTS_STORE_KEY,
   FINANCE_REPORTS_STORE_KEY,
+  buildFinanceReportSnapshot,
   formatFinanceInvoiceDirection,
+  getFinanceAllocatedAmountForInvoice,
   getFinanceContextualInvoices,
+  getFinanceInvoiceAmount,
   getFinanceInvoiceAvailableAmount,
+  getFinancePaymentAmount,
   normalizeFinanceInvoiceValues,
   normalizeFinancePaymentValues,
   resolveEntityRecords,
 } from '../domain/finance'
-import { formatMoneyString, normalizePhoneStrict } from '../domain/formatters'
+import { formatMoneyString, formatPhoneMask, normalizePhoneStrict } from '../domain/formatters'
 import {
   buildInventoryPurchaseTitle,
   buildInventoryStockReference,
@@ -91,6 +95,8 @@ const PAGE_SIZE = 8
 const PREFERENCES_PREFIX = 'kis.listPrefs.'
 const CARS_CATALOG_STORE_KEY = 'crm-sales/cars'
 const CRM_SALES_DOCUMENTS_STORE_KEY = 'crm-sales/documents'
+const SERVICE_ORDERS_STORE_KEY = 'service/orders'
+const SERVICE_DOCUMENTS_STORE_KEY = 'service/documents'
 const VIN_FIELD_KEY = 'vin'
 const DEFAULT_STOCK_WAREHOUSE = 'Основной'
 const DEFAULT_STOCK_OWNER = 'Кладовщик'
@@ -285,7 +291,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
   const navigate = useNavigate()
   const location = useLocation()
   const { can, role } = useAuth()
-  const { getRecords, createRecord, linkRecords, flushStore } = useEntityStore()
+  const { getRecords, createRecord, updateStatus, linkRecords, flushStore } = useEntityStore()
   const storeKey = buildStoreKey(subsystem.slug, rawTab.slug)
   const tab = rawTab
   const createAction = tab.actions.find((action) => action.key === 'create')
@@ -1027,6 +1033,8 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
     }
 
     if (isFinanceReportsTab) {
+      const snapshot = buildFinanceReportSnapshot(financeInvoiceRecords, financePaymentRecords)
+      values = { ...snapshot, ...values }
       subtitle = buildFinanceReportSubtitle(values)
     }
 
@@ -1131,19 +1139,57 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
         getRecords,
         created.values.managerText,
       ).trim()
+      const clientId = (created.values.client ?? '').trim()
+      const clientRecord = clientId
+        ? getRecords('crm-sales/clients').find((rec) => rec.id === clientId)
+        : undefined
+      const clientName = (clientRecord?.title ?? created.values.clientText ?? '').trim()
+      const clientPhone = (clientRecord?.values.phone ?? '').trim()
+      const clientEmail = (clientRecord?.values.email ?? '').trim()
+      const clientLabel = clientName ? `${clientName}${clientId ? ` (${clientId})` : ''}` : clientId || '—'
+      const carBrand = (created.values.carBrand ?? '').trim()
+      const carModel = (created.values.carModel ?? '').trim()
+      const carYear = (created.values.carYear ?? '').trim()
+      const carVin = (created.values.carVin ?? '').trim()
+      const carPlate = (created.values.carPlateNumber ?? '').trim()
+      const carDescriptor = [carBrand, carModel, carYear ? `(${carYear})` : ''].filter(Boolean).join(' ')
+      const carLabel = [carDescriptor, carVin ? `VIN ${carVin}` : '', carPlate ? `Гос.номер ${carPlate}` : '']
+        .filter(Boolean)
+        .join(' • ') || '—'
+      const dealAmount = formatMoneyString(created.values.amount ?? '') || '—'
+      const today = new Date().toISOString().slice(0, 10)
+      const subtitleParts = [clientName || clientId, carDescriptor || carVin, dealAmount !== '—' ? `${dealAmount} ₽` : '']
+        .filter(Boolean)
       const contract = createRecord({
         storeKey: CRM_SALES_DOCUMENTS_STORE_KEY,
         idPrefix: 'DOC',
         initialStatus: 'draft',
-        title: `Договор ${contractNumber}`,
-        subtitle: `Сделка ${created.id}`,
+        title: `Договор купли-продажи №${contractNumber}`,
+        subtitle: subtitleParts.join(' • ') || `Сделка ${created.id}`,
         values: {
           number: contractNumber,
-          docType: 'Договор',
+          docType: 'Договор купли-продажи автомобиля',
           owner: managerOwnerLabel || 'Менеджер',
-          client: created.values.client ?? '',
+          client: clientId,
+          clientText: clientName,
+          buyer: clientLabel,
+          buyerPhone: clientPhone,
+          buyerEmail: clientEmail,
+          car: carLabel,
+          carBrand,
+          carModel,
+          carYear,
+          carVin,
+          carPlate,
+          amount: dealAmount,
+          dealId: created.id,
+          contractDate: today,
         },
-        createdHistoryText: 'Договор создан автоматически после формирования сделки',
+        createdHistoryText:
+          `Договор купли-продажи ${contractNumber} оформлен на покупателя ${clientLabel}` +
+          (carLabel !== '—' ? ` на автомобиль ${carLabel}` : '') +
+          (dealAmount !== '—' ? ` на сумму ${dealAmount} ₽` : '') +
+          ` (сделка ${created.id}).`,
       })
       const invoice = createRecord({
         storeKey: FINANCE_INVOICES_STORE_KEY,
@@ -1161,7 +1207,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
           direction: 'outgoing',
           amount: formatMoneyString(created.values.amount ?? ''),
           paidAmount: '0',
-          dueDate: '',
+          dueDate: new Date().toISOString().slice(0, 10),
           owner: managerOwnerLabel || DEFAULT_FINANCE_OWNER,
           dealId: created.id,
         },
@@ -1362,6 +1408,49 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
       })
     }
 
+    if (storeKey === SERVICE_ORDERS_STORE_KEY) {
+      const serviceDocs = getRecords(SERVICE_DOCUMENTS_STORE_KEY)
+      const actNumber = buildNextNumber(serviceDocs, 'SA')
+      const masterLabel = (created.values.master ?? created.values.masterText ?? '').trim() || 'Сервис-администратор'
+      const vin = (created.values.vin ?? '').trim()
+      const eta = (created.values.eta ?? '').trim()
+      const subtitleParts = [created.title, vin ? `VIN ${vin}` : '', eta ? `срок ${eta}` : ''].filter(Boolean)
+      const act = createRecord({
+        storeKey: SERVICE_DOCUMENTS_STORE_KEY,
+        idPrefix: 'SD',
+        initialStatus: 'draft',
+        title: `Акт выполненных работ ${actNumber}`,
+        subtitle: `Заказ-наряд ${created.id} • ${subtitleParts.join(' • ')}`,
+        values: {
+          number: actNumber,
+          docType: 'Акт выполненных работ',
+          wo: created.id,
+          owner: masterLabel,
+          vin,
+          eta,
+        },
+        createdHistoryText: `Акт ${actNumber} создан автоматически по заказ-наряду ${created.id}.`,
+      })
+
+      const orderValue = `${created.id}: ${created.title}`
+      const actValue = buildRelatedDocumentValue(act)
+
+      linkRecords({
+        left: {
+          storeKey,
+          recordId: created.id,
+          label: 'Документ',
+          value: actValue,
+        },
+        right: {
+          storeKey: SERVICE_DOCUMENTS_STORE_KEY,
+          recordId: act.id,
+          label: 'Заказ-наряд',
+          value: orderValue,
+        },
+      })
+    }
+
     if (isFinancePaymentsTab && selectedFinanceInvoice) {
       const paymentValue = buildRelatedPaymentValue(created)
       const invoiceValue = buildRelatedInvoiceValue(selectedFinanceInvoice)
@@ -1400,6 +1489,53 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
             value: paymentValue,
           },
         })
+      }
+
+      const previousAllocated = getFinanceAllocatedAmountForInvoice(
+        getRecords(FINANCE_PAYMENTS_STORE_KEY).filter((rec) => rec.id !== created.id),
+        selectedFinanceInvoice.id,
+      )
+      const newPaymentAmount = getFinancePaymentAmount(created)
+      const invoiceTotal = getFinanceInvoiceAmount(selectedFinanceInvoice)
+      const fullyPaid = invoiceTotal > 0 && previousAllocated + newPaymentAmount + 0.005 >= invoiceTotal
+
+      if (fullyPaid) {
+        updateStatus({
+          storeKey: FINANCE_INVOICES_STORE_KEY,
+          recordId: selectedFinanceInvoice.id,
+          status: 'paid',
+          note: `Счет полностью оплачен платежом ${created.id}.`,
+        })
+
+        const dealId = (selectedFinanceInvoice.values.dealId ?? '').trim()
+        if (dealId) {
+          const dealRecord = getRecords(DEALS_STORE_KEY).find((rec) => rec.id === dealId)
+          if (dealRecord && dealRecord.status !== 'closed') {
+            updateStatus({
+              storeKey: DEALS_STORE_KEY,
+              recordId: dealId,
+              status: 'closed',
+              note: `Сделка закрыта автоматически после полной оплаты счета ${selectedFinanceInvoice.id}.`,
+            })
+          }
+        }
+
+        for (const item of selectedFinanceInvoice.related) {
+          if (item.storeKey !== CRM_SALES_DOCUMENTS_STORE_KEY || !item.recordId) {
+            continue
+          }
+          const docRecord = getRecords(CRM_SALES_DOCUMENTS_STORE_KEY).find(
+            (rec) => rec.id === item.recordId,
+          )
+          if (docRecord && docRecord.status === 'draft') {
+            updateStatus({
+              storeKey: CRM_SALES_DOCUMENTS_STORE_KEY,
+              recordId: item.recordId,
+              status: 'posted',
+              note: `Документ проведён автоматически после полной оплаты счета ${selectedFinanceInvoice.id}.`,
+            })
+          }
+        }
       }
     }
 
@@ -1496,6 +1632,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
     }
 
     if (resolvedField.inputType !== 'select') {
+      const isPhoneField = field.key === 'phone'
       return (
         <label key={field.key} className="field">
           <span>
@@ -1504,9 +1641,16 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
           </span>
           <input
             value={value}
-            onChange={(event) => applyCreateFieldValue(field.key, event.target.value)}
+            onChange={(event) =>
+              applyCreateFieldValue(
+                field.key,
+                isPhoneField ? formatPhoneMask(event.target.value) : event.target.value,
+              )
+            }
             placeholder={field.placeholder}
-            inputMode={isInventoryPurchaseNumericField ? 'numeric' : undefined}
+            inputMode={
+              isInventoryPurchaseNumericField || isPhoneField ? (isPhoneField ? 'tel' : 'numeric') : undefined
+            }
           />
         </label>
       )
@@ -1679,7 +1823,9 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
                   <Link to={`/${subsystem.slug}/${tab.slug}/${record.id}`} className="table-link">
                     {record.title}
                   </Link>
-                  <p className="table-link__subtitle">{record.subtitle}</p>
+                  {tab.slug === 'clients' || tab.slug === 'leads' ? null : (
+                    <p className="table-link__subtitle">{record.subtitle}</p>
+                  )}
                   {isInventoryStockTab ? (
                     <p className="table-link__subtitle">
                       Открытых закупок: {purchaseCount} • Накладных: {documentCount} • Счетов: {invoiceCount}
@@ -1710,8 +1856,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
                         type="button"
                         className="btn-secondary"
                         onClick={() => openStockRelatedRecords(record, INVENTORY_DOCUMENTS_STORE_KEY)}
-                        disabled={documentCount === 0}
-                        title={documentCount === 0 ? 'Связанных накладных пока нет' : ''}
+                        title={documentCount === 0 ? 'Связанных накладных пока нет — откроется общий список' : ''}
                       >
                         Накладные
                       </button>
@@ -1719,8 +1864,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
                         type="button"
                         className="btn-secondary"
                         onClick={() => openStockRelatedRecords(record, FINANCE_INVOICES_STORE_KEY)}
-                        disabled={invoiceCount === 0}
-                        title={invoiceCount === 0 ? 'Связанных счетов пока нет' : ''}
+                        title={invoiceCount === 0 ? 'Связанных счетов пока нет — откроется общий список' : ''}
                       >
                         Счета
                       </button>
@@ -1752,15 +1896,36 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
                   to={`/${subsystem.slug}/${tab.slug}/${record.id}`}
                   className="kanban-card"
                 >
-                  {isDealsTab ? (
-                    <>
-                      <p className="kanban-card__title">{record.title}</p>
-                      <p>Клиент: {record.values.client ?? '-'}</p>
-                      <p>VIN: {record.values.vin ?? '-'}</p>
-                      <p>Сумма: {formatMoneyDisplay(record.values.amount ?? '') || '-'}</p>
-                      <p>Статус: {getStatusDefinition(tab, record.status)?.label ?? record.status}</p>
-                    </>
-                  ) : (
+                  {isDealsTab ? (() => {
+                    const clientId = (record.values.client ?? '').trim()
+                    const clientRecord = clientId
+                      ? getRecords('crm-sales/clients').find((item) => item.id === clientId)
+                      : undefined
+                    const clientText = clientRecord
+                      ? `${clientRecord.title} (${clientRecord.id})`
+                      : (record.values.clientText ?? '').trim() || clientId || '-'
+
+                    const carId = (record.values.carRecordId ?? record.values.vin ?? '').trim()
+                    const carRecord = carId
+                      ? getRecords(DEAL_CARS_STORE_KEY).find((item) => item.id === carId)
+                      : undefined
+                    const vinValue = (record.values.carVin ?? carRecord?.values.vin ?? '').trim()
+                    const carTitle = (record.values.carRecordTitle ?? carRecord?.title ?? '').trim()
+                    const carParts = [carTitle, vinValue ? `VIN ${vinValue}` : ''].filter(Boolean)
+                    const carText = carRecord
+                      ? `${carParts.join(' • ') || vinValue || carRecord.title} (${carRecord.id})`
+                      : carParts.join(' • ') || vinValue || carId || '-'
+
+                    return (
+                      <>
+                        <p className="kanban-card__title">{record.title}</p>
+                        <p>Клиент: {clientText}</p>
+                        <p>Авто: {carText}</p>
+                        <p>Сумма: {formatMoneyDisplay(record.values.amount ?? '') || '-'}</p>
+                        <p>Статус: {getStatusDefinition(tab, record.status)?.label ?? record.status}</p>
+                      </>
+                    )
+                  })() : (
                     <>
                       <strong>{record.id}</strong>
                       <p>{record.title}</p>

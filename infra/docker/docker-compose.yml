@@ -481,6 +481,9 @@ services:
       context: ../../services/service-parts-usage
     environment:
       <<: *svc-env
+      INVENTORY_STOCK_API_URL: "http://inventory-stock:8080"
+      INVENTORY_PROCUREMENT_API_URL: "http://inventory-procurement:8080"
+      SERVICE_WORKORDERS_API_URL: "http://service-workorders:8080"
       OUTBOX_TARGETS: "http://inventory-stock:8080,http://inventory-procurement:8080,http://notification:8080,http://audit-log:8080"
       OUTBOX_DISPATCH_ENABLED: "true"
     ports:

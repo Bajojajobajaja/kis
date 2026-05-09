@@ -60,7 +60,7 @@ import {
   resolveEntityRecord,
 } from '../domain/finance'
 import { downloadFinanceReport, exportFinanceReport } from '../domain/financeReportingApi'
-import { formatMoneyString, normalizePhoneStrict } from '../domain/formatters'
+import { formatMoneyString, formatPhoneMask, normalizePhoneStrict } from '../domain/formatters'
 import {
   buildInventoryPurchaseTitle,
   canCancelInventoryPurchase,
@@ -820,15 +820,23 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
   const singleLinkedIssuedInvoice = linkedIssuedInvoiceRecords.length === 1
     ? linkedIssuedInvoiceRecords[0]
     : undefined
+  const purchaseInvoiceForPayment =
+    isInventoryPurchasesCard && relatedPurchaseInvoice && relatedPurchaseInvoice.status === 'issued'
+      ? relatedPurchaseInvoice
+      : undefined
   const canCreatePaymentFromCard =
-    (isDealCard || isSalesDocumentCard) &&
-    can('create', FINANCE_PAYMENTS_STORE_KEY) &&
-    linkedIssuedInvoiceRecords.length > 0
+    ((isDealCard || isSalesDocumentCard) && linkedIssuedInvoiceRecords.length > 0 ||
+      (isInventoryPurchasesCard && purchaseInvoiceForPayment)) &&
+    can('create', FINANCE_PAYMENTS_STORE_KEY)
   const createPaymentFromCardReason = canCreatePaymentFromCard
     ? ''
     : !can('create', FINANCE_PAYMENTS_STORE_KEY)
       ? getActionDeniedReason(role, 'create', FINANCE_PAYMENTS_STORE_KEY)
-      : 'Для этой карточки нет связанных выставленных счетов.'
+      : isInventoryPurchasesCard && relatedPurchaseInvoice && relatedPurchaseInvoice.status !== 'issued'
+        ? 'Связанный счет уже оплачен или отменен.'
+        : isInventoryPurchasesCard
+          ? 'У закупки пока нет связанного входящего счета.'
+          : 'Для этой карточки нет связанных выставленных счетов.'
   const salesDocumentType = (record.values.docType ?? '').trim().toLowerCase()
   const salesContractDeal = salesContextDealId
     ? resolveEntityRecord(DEALS_STORE_KEY, salesContextDealId, getRecords)
@@ -1327,18 +1335,27 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
     }
 
     const titleSource = (record.values.number ?? '').trim() || record.id
-    const title = isSalesDocumentCard
-      ? `Оплата по договору ${titleSource}`
-      : `Оплата по сделке ${record.id}`
+    const title = isInventoryPurchasesCard
+      ? `Оплата по закупке ${record.id}`
+      : isSalesDocumentCard
+        ? `Оплата по договору ${titleSource}`
+        : `Оплата по сделке ${record.id}`
     const prefillCreateValues: Record<string, string> = {
       title,
     }
 
-    if (salesContextDealId) {
-      prefillCreateValues.dealId = salesContextDealId
-    }
-    if (singleLinkedIssuedInvoice) {
-      prefillCreateValues.invoice = singleLinkedIssuedInvoice.id
+    if (isInventoryPurchasesCard) {
+      prefillCreateValues.purchaseId = record.id
+      if (purchaseInvoiceForPayment) {
+        prefillCreateValues.invoice = purchaseInvoiceForPayment.id
+      }
+    } else {
+      if (salesContextDealId) {
+        prefillCreateValues.dealId = salesContextDealId
+      }
+      if (singleLinkedIssuedInvoice) {
+        prefillCreateValues.invoice = singleLinkedIssuedInvoice.id
+      }
     }
 
     navigate('/finance/payments', {
@@ -1347,7 +1364,17 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
         prefillCreateValues,
       } satisfies EntityCardNavigationState,
     })
-  }, [canCreatePaymentFromCard, isSalesDocumentCard, navigate, record.id, record.values.number, salesContextDealId, singleLinkedIssuedInvoice])
+  }, [
+    canCreatePaymentFromCard,
+    isInventoryPurchasesCard,
+    isSalesDocumentCard,
+    navigate,
+    purchaseInvoiceForPayment,
+    record.id,
+    record.values.number,
+    salesContextDealId,
+    singleLinkedIssuedInvoice,
+  ])
 
   const handleSalesContractDownload = useCallback(async () => {
     if (!canDownloadSalesContractPdf || !salesContractDeal || isSalesDocumentDownloading) {
@@ -2083,13 +2110,21 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
     }
 
     if (resolvedField.inputType !== 'select') {
+      const isPhoneField = key === 'phone'
       return (
         <label key={key} className="field">
           <span>{resolvedField.label}</span>
           <input
             value={value}
-            onChange={(event) => applyEditFieldValue(key, event.target.value)}
-            inputMode={isInventoryPurchaseNumericField ? 'numeric' : undefined}
+            onChange={(event) =>
+              applyEditFieldValue(
+                key,
+                isPhoneField ? formatPhoneMask(event.target.value) : event.target.value,
+              )
+            }
+            inputMode={
+              isPhoneField ? 'tel' : isInventoryPurchaseNumericField ? 'numeric' : undefined
+            }
           />
         </label>
       )
@@ -2199,7 +2234,7 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
             ]}
           />
           <h3>{record.title}</h3>
-          <p>{record.subtitle}</p>
+          {tab.slug === 'clients' || tab.slug === 'leads' ? null : <p>{record.subtitle}</p>}
         </div>
         <div className="context-actions context-actions--wrap">
           {!hideCardStatusBadge ? <StatusBadge label={currentStatus.label} tone={currentStatus.tone} /> : null}
@@ -2215,7 +2250,8 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
               Оформить сделку
             </button>
           ) : null}
-          {isDealCard || isSalesDocumentCard ? (
+          {((isDealCard || isSalesDocumentCard) && linkedIssuedInvoiceRecords.length > 0) ||
+          (isInventoryPurchasesCard && purchaseInvoiceForPayment) ? (
             <button
               className="btn-secondary"
               disabled={!canCreatePaymentFromCard}
@@ -2586,10 +2622,12 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
                   <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
                 </label>
               ) : null}
-              <label className="field">
-                <span>Описание</span>
-                <input value={editSubtitle} onChange={(event) => setEditSubtitle(event.target.value)} />
-              </label>
+              {tab.slug === 'clients' || tab.slug === 'leads' ? null : (
+                <label className="field">
+                  <span>Описание</span>
+                  <input value={editSubtitle} onChange={(event) => setEditSubtitle(event.target.value)} />
+                </label>
+              )}
               {isDealCard
                 ? dealEditFieldKeys.map((key) => renderEditField(key, editValues[key] ?? ''))
                 : isInventoryPurchasesCard
