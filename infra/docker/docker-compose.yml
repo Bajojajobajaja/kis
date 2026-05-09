@@ -7,6 +7,24 @@ x-default-logging: &default-logging
       max-size: "10m"
       max-file: "3"
 
+x-svc-common: &svc-common
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+  networks: [kis-net]
+  <<: *default-logging
+
+x-svc-env: &svc-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: ${POSTGRES_USER:-kis}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-kis_local_password}
+  DB_SSLMODE: disable
+  PERSISTENCE_ENABLED: "true"
+  PERSISTENCE_STRICT: "false"
+  SERVER_PORT: "8080"
+
 services:
   nats:
     image: nats:2.10.21-alpine
@@ -27,6 +45,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-kis}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kis_local_password}
       POSTGRES_DB: ${POSTGRES_DB:-platform}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
@@ -204,6 +223,216 @@ services:
     restart: unless-stopped
     networks: [kis-net]
     <<: *default-logging
+
+  # ── Microservices ──────────────────────────────────────────────────────────
+
+  analytics-marts:
+    <<: *svc-common
+    build:
+      context: ../../services/analytics-marts
+    environment: *svc-env
+    ports:
+      - "19080:8080"
+
+  api-gateway:
+    <<: *svc-common
+    build:
+      context: ../../services/api-gateway
+    environment: *svc-env
+    ports:
+      - "19081:8080"
+
+  audit-log:
+    <<: *svc-common
+    build:
+      context: ../../services/audit-log
+    environment: *svc-env
+    ports:
+      - "19082:8080"
+
+  crm-contacts:
+    <<: *svc-common
+    build:
+      context: ../../services/crm-contacts
+    environment: *svc-env
+    ports:
+      - "19083:8080"
+
+  crm-leads:
+    <<: *svc-common
+    build:
+      context: ../../services/crm-leads
+    environment: *svc-env
+    ports:
+      - "19084:8080"
+
+  finance-costing:
+    <<: *svc-common
+    build:
+      context: ../../services/finance-costing
+    environment: *svc-env
+    ports:
+      - "19085:8080"
+
+  finance-invoicing:
+    <<: *svc-common
+    build:
+      context: ../../services/finance-invoicing
+    environment: *svc-env
+    ports:
+      - "19086:8080"
+
+  finance-ledger:
+    <<: *svc-common
+    build:
+      context: ../../services/finance-ledger
+    environment: *svc-env
+    ports:
+      - "19087:8080"
+
+  finance-reporting:
+    <<: *svc-common
+    build:
+      context: ../../services/finance-reporting
+    environment: *svc-env
+    ports:
+      - "19088:8080"
+
+  identity-access:
+    <<: *svc-common
+    build:
+      context: ../../services/identity-access
+    environment: *svc-env
+    ports:
+      - "19089:8080"
+
+  inventory-audit:
+    <<: *svc-common
+    build:
+      context: ../../services/inventory-audit
+    environment: *svc-env
+    ports:
+      - "19090:8080"
+
+  inventory-procurement:
+    <<: *svc-common
+    build:
+      context: ../../services/inventory-procurement
+    environment: *svc-env
+    ports:
+      - "19091:8080"
+
+  inventory-receiving:
+    <<: *svc-common
+    build:
+      context: ../../services/inventory-receiving
+    environment: *svc-env
+    ports:
+      - "19092:8080"
+
+  inventory-stock:
+    <<: *svc-common
+    build:
+      context: ../../services/inventory-stock
+    environment: *svc-env
+    ports:
+      - "19093:8080"
+
+  masterdata-catalog:
+    <<: *svc-common
+    build:
+      context: ../../services/masterdata-catalog
+    environment: *svc-env
+    ports:
+      - "19094:8080"
+
+  notification:
+    <<: *svc-common
+    build:
+      context: ../../services/notification
+    environment: *svc-env
+    ports:
+      - "19095:8080"
+
+  pricing:
+    <<: *svc-common
+    build:
+      context: ../../services/pricing
+    environment: *svc-env
+    ports:
+      - "19096:8080"
+
+  reporting-bi:
+    <<: *svc-common
+    build:
+      context: ../../services/reporting-bi
+    environment: *svc-env
+    ports:
+      - "19097:8080"
+
+  sales-deals:
+    <<: *svc-common
+    build:
+      context: ../../services/sales-deals
+    environment: *svc-env
+    ports:
+      - "19098:8080"
+
+  sales-documents:
+    <<: *svc-common
+    build:
+      context: ../../services/sales-documents
+    environment: *svc-env
+    ports:
+      - "19099:8080"
+
+  service-appointments:
+    <<: *svc-common
+    build:
+      context: ../../services/service-appointments
+    environment: *svc-env
+    ports:
+      - "19100:8080"
+
+  service-billing:
+    <<: *svc-common
+    build:
+      context: ../../services/service-billing
+    environment: *svc-env
+    ports:
+      - "19101:8080"
+
+  service-diagnostics:
+    <<: *svc-common
+    build:
+      context: ../../services/service-diagnostics
+    environment: *svc-env
+    ports:
+      - "19102:8080"
+
+  service-labor-catalog:
+    <<: *svc-common
+    build:
+      context: ../../services/service-labor-catalog
+    environment: *svc-env
+    ports:
+      - "19103:8080"
+
+  service-parts-usage:
+    <<: *svc-common
+    build:
+      context: ../../services/service-parts-usage
+    environment: *svc-env
+    ports:
+      - "19104:8080"
+
+  service-workorders:
+    <<: *svc-common
+    build:
+      context: ../../services/service-workorders
+    environment: *svc-env
+    ports:
+      - "19105:8080"
 
 networks:
   kis-net:
