@@ -151,6 +151,7 @@ describe('entityStoreMigrations', () => {
       'RLB-SALES',
       'RLB-MECHANIC',
       'RLB-ANALYST',
+      'RLB-WAREHOUSE',
     ])
     expect(salesRole?.title).toBe('Менеджер по продажам')
     expect(salesRole?.values.users).toBe('1')

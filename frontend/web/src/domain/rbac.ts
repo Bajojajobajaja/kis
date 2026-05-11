@@ -46,6 +46,7 @@ export const accessRoleLabels: Record<AccessRole, string> = {
   sales: 'Менеджер по продажам',
   mechanic: 'Механик',
   analyst: 'Аналитик',
+  warehouse: 'Кладовщик',
 }
 
 export const roleLabels = accessRoleLabels
@@ -55,6 +56,7 @@ export const platformRoleRecordIds: Record<AccessRole, string> = {
   sales: 'RLB-SALES',
   mechanic: 'RLB-MECHANIC',
   analyst: 'RLB-ANALYST',
+  warehouse: 'RLB-WAREHOUSE',
 }
 
 const roleSubsystemAccess: Record<AccessRole, SubsystemSlug[]> = {
@@ -62,6 +64,7 @@ const roleSubsystemAccess: Record<AccessRole, SubsystemSlug[]> = {
   sales: ['crm-sales', 'finance'],
   mechanic: ['service', 'inventory', 'finance'],
   analyst: ['finance'],
+  warehouse: ['inventory', 'finance'],
 }
 
 const roleDefaultPaths: Record<AccessRole, string> = {
@@ -69,6 +72,7 @@ const roleDefaultPaths: Record<AccessRole, string> = {
   sales: '/crm-sales/clients',
   mechanic: '/service/orders',
   analyst: '/finance/analytics',
+  warehouse: '/inventory/stock',
 }
 
 const subsystemLabels: Record<SubsystemSlug, string> = {
@@ -92,6 +96,7 @@ export const accessRolePermissionProfiles: Record<AccessRole, string> = {
   sales: 'Рабочий доступ',
   mechanic: 'Рабочий доступ + списание',
   analyst: 'Отчеты и аналитика',
+  warehouse: 'Рабочий доступ + списание',
 }
 
 export const accessRoleSubsystemSummaries: Record<AccessRole, string> = {
@@ -99,6 +104,7 @@ export const accessRoleSubsystemSummaries: Record<AccessRole, string> = {
   sales: 'CRM, Финансы',
   mechanic: 'Сервис, Склад, Финансы',
   analyst: 'Финансы',
+  warehouse: 'Склад, Финансы',
 }
 
 export const accessRoleOptions: EntityFieldOption[] = Object.entries(accessRoleLabels).map(
@@ -113,7 +119,8 @@ export function isAccessRole(value: string): value is AccessRole {
     value === 'administrator' ||
     value === 'sales' ||
     value === 'mechanic' ||
-    value === 'analyst'
+    value === 'analyst' ||
+    value === 'warehouse'
   )
 }
 
@@ -198,6 +205,9 @@ export function canRolePerform(
     return workingActions.includes(action)
   }
   if (role === 'mechanic') {
+    return mechanicActions.includes(action)
+  }
+  if (role === 'warehouse') {
     return mechanicActions.includes(action)
   }
   if (role === 'analyst') {

@@ -16,7 +16,7 @@ export type ActionKey =
   | 'writeoff'
   | 'reopen'
 
-export type AppRole = 'administrator' | 'sales' | 'mechanic' | 'analyst'
+export type AppRole = 'administrator' | 'sales' | 'mechanic' | 'analyst' | 'warehouse'
 export type AccessRole = AppRole
 export type Role = AccessRole
 

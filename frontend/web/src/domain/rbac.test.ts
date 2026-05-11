@@ -39,6 +39,21 @@ describe('rbac', () => {
     expect(canRolePerform('mechanic', 'create', 'crm-sales/deals')).toBe(false)
   })
 
+  it('lets warehouse keepers work in inventory and finance including writeoff', () => {
+    expect(canAccessSubsystem('warehouse', 'inventory')).toBe(true)
+    expect(canAccessSubsystem('warehouse', 'finance')).toBe(true)
+    expect(canAccessSubsystem('warehouse', 'service')).toBe(false)
+    expect(canAccessSubsystem('warehouse', 'crm-sales')).toBe(false)
+    expect(getDefaultPath('warehouse')).toBe('/inventory/stock')
+    expect(getDefaultPathForSubsystem('warehouse', 'finance')).toBe('/finance/invoices')
+    expect(canRolePerform('warehouse', 'create', 'inventory/purchases')).toBe(true)
+    expect(canRolePerform('warehouse', 'edit', 'inventory/stock')).toBe(true)
+    expect(canRolePerform('warehouse', 'writeoff', 'inventory/stock')).toBe(true)
+    expect(canRolePerform('warehouse', 'create', 'finance/invoices')).toBe(true)
+    expect(canRolePerform('warehouse', 'create', 'service/orders')).toBe(false)
+    expect(canRolePerform('warehouse', 'create', 'crm-sales/deals')).toBe(false)
+  })
+
   it('lets analysts work across finance while platform roles stay read-only', () => {
     expect(canRolePerform('analyst', 'create', 'finance/reports')).toBe(true)
     expect(canRolePerform('analyst', 'post', 'finance/reports')).toBe(true)

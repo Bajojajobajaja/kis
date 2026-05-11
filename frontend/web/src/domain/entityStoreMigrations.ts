@@ -22,7 +22,7 @@ import {
   INVENTORY_PURCHASES_STORE_KEY,
   INVENTORY_STOCK_STORE_KEY,
 } from './inventory'
-import { buildStoreKey, type EntityRecord } from './model'
+import { buildStoreKey, type AccessRole, type EntityRecord } from './model'
 import {
   buildPlatformRoleSubtitle,
   buildPlatformRoleValues,
@@ -32,6 +32,7 @@ import {
   PLATFORM_ROLE_ANALYST_ID,
   PLATFORM_ROLE_MECHANIC_ID,
   PLATFORM_ROLE_SALES_ID,
+  PLATFORM_ROLE_WAREHOUSE_ID,
   PLATFORM_USERS_STORE_KEY,
   normalizePlatformUserValues,
   resolvePlatformUserLabel,
@@ -339,13 +340,14 @@ function deriveBusinessRoleId(values: Record<string, string>): string {
 
   const legacyAccessRole = (values.accessRole ?? '').trim()
   if (isAccessRole(legacyAccessRole)) {
-    return legacyAccessRole === 'administrator'
-      ? PLATFORM_ROLE_ADMIN_ID
-      : legacyAccessRole === 'sales'
-        ? PLATFORM_ROLE_SALES_ID
-        : legacyAccessRole === 'mechanic'
-          ? PLATFORM_ROLE_MECHANIC_ID
-          : PLATFORM_ROLE_ANALYST_ID
+    const accessRoleToPlatformRoleId: Record<AccessRole, string> = {
+      administrator: PLATFORM_ROLE_ADMIN_ID,
+      sales: PLATFORM_ROLE_SALES_ID,
+      mechanic: PLATFORM_ROLE_MECHANIC_ID,
+      analyst: PLATFORM_ROLE_ANALYST_ID,
+      warehouse: PLATFORM_ROLE_WAREHOUSE_ID,
+    }
+    return accessRoleToPlatformRoleId[legacyAccessRole]
   }
   if (legacyAccessRole === 'admin') {
     return PLATFORM_ROLE_ADMIN_ID

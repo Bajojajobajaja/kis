@@ -1633,6 +1633,12 @@ export const seedData: Record<string, EntityRecord[]> = {
       department: 'Финансы',
       phone: '+7 (900) 101-00-08',
     }),
+    row('USR-4009', 'Никитин Н.Н.', 'Кладовщик • Склад', 'active', {
+      email: 'warehouse@kis.local',
+      businessRoleId: 'RLB-WAREHOUSE',
+      department: 'Склад',
+      phone: '+7 (900) 101-00-09',
+    }),
   ],
   'platform/roles': [
     row('RLB-ADMIN', 'Администратор', 'CRM, Сервис, Склад, Финансы, Платформа • Security Team', 'active', {
@@ -1646,6 +1652,9 @@ export const seedData: Record<string, EntityRecord[]> = {
     }),
     row('RLB-ANALYST', 'Аналитик', 'Финансы • Security Team', 'active', {
       ...buildPlatformRoleValues('RLB-ANALYST', 1),
+    }),
+    row('RLB-WAREHOUSE', 'Кладовщик', 'Склад, Финансы • Security Team', 'active', {
+      ...buildPlatformRoleValues('RLB-WAREHOUSE', 1),
     }),
   ],
   'platform/audits': [

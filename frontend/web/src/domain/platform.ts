@@ -20,17 +20,20 @@ export const PLATFORM_ROLE_ADMIN_ID = platformRoleRecordIds.administrator
 export const PLATFORM_ROLE_SALES_ID = platformRoleRecordIds.sales
 export const PLATFORM_ROLE_MECHANIC_ID = platformRoleRecordIds.mechanic
 export const PLATFORM_ROLE_ANALYST_ID = platformRoleRecordIds.analyst
+export const PLATFORM_ROLE_WAREHOUSE_ID = platformRoleRecordIds.warehouse
 
 export const SALES_DEPARTMENT = 'Продажи'
 export const SERVICE_DEPARTMENT = 'Сервис и склад'
 export const PLATFORM_DEPARTMENT = 'Платформа'
 export const FINANCE_DEPARTMENT = 'Финансы'
+export const WAREHOUSE_DEPARTMENT = 'Склад'
 
 const roleDepartments: Record<string, string> = {
   [PLATFORM_ROLE_ADMIN_ID]: PLATFORM_DEPARTMENT,
   [PLATFORM_ROLE_SALES_ID]: SALES_DEPARTMENT,
   [PLATFORM_ROLE_MECHANIC_ID]: SERVICE_DEPARTMENT,
   [PLATFORM_ROLE_ANALYST_ID]: FINANCE_DEPARTMENT,
+  [PLATFORM_ROLE_WAREHOUSE_ID]: WAREHOUSE_DEPARTMENT,
 }
 
 export const PLATFORM_USER_REFERENCE_SOURCE: EntityFieldOptionsSource = {
@@ -166,7 +169,9 @@ export function buildPlatformRoleValues(
           ? 'CRM'
           : role === 'mechanic'
             ? 'Service, Inventory'
-            : 'Finance',
+            : role === 'warehouse'
+              ? 'Inventory, Finance'
+              : 'Finance',
     permissions: accessRoleLabels[role],
   }
 }
