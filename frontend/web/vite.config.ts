@@ -35,6 +35,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/svc\/finance-reporting/, ''),
       },
+      '/svc/finance-invoicing': {
+        target: 'http://localhost:19086',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/svc\/finance-invoicing/, ''),
+      },
       '/svc/sales-documents': {
         target: 'http://localhost:19099',
         changeOrigin: true,

@@ -59,6 +59,7 @@ import {
   normalizeFinancePaymentValues,
   resolveEntityRecord,
 } from '../domain/finance'
+import { ensureFinanceInvoicingForPeriod } from '../domain/financeInvoicingSync'
 import { downloadFinanceReport, exportFinanceReport } from '../domain/financeReportingApi'
 import { formatMoneyString, formatPhoneMask, normalizePhoneStrict } from '../domain/formatters'
 import {
@@ -119,6 +120,7 @@ import {
   type ActionKey,
   type EntityCreateField,
   type EntityRecord,
+  type EntityRelatedRecord,
   type EntityStoreKey,
   type EntityTabDefinition,
   type SubsystemDefinition,
@@ -246,7 +248,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCardViewProps) {
   const navigate = useNavigate()
   const { can, role } = useAuth()
-  const { createRecord, updateRecord, updateStatus, deleteRecord, getRecords } = useEntityStore()
+  const { createRecord, updateRecord, updateStatus, deleteRecord, getRecords, store } = useEntityStore()
   const tab = rawTab
   const currentStatus = getStatusDefinition(tab, record.status) ?? tab.statuses[0]
   const isDealCard = storeKey === DEALS_STORE_KEY
@@ -1718,14 +1720,25 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
       setReportActionError('')
       setIsReportGenerating(true)
       try {
+        const requestedPeriod = (record.values.period ?? '').trim()
+        const periodMatchForSync = requestedPeriod.match(/^(\d{2})\.(\d{4})$/)
+        if (periodMatchForSync) {
+          await ensureFinanceInvoicingForPeriod(
+            store,
+            `${periodMatchForSync[2]}-${periodMatchForSync[1]}`,
+          )
+        }
         const exportResponse = await exportFinanceReport({
           report: financeReportType,
           format: financeReportFormat.toLowerCase(),
           owner: record.values.owner,
-          period: (record.values.period ?? '').trim(),
+          period: requestedPeriod,
         })
-        const summaryValues = exportResponse.summary
-          ? buildFinanceReportValuesFromSummary(exportResponse.summary)
+        const summaryHasData =
+          !!exportResponse.summary &&
+          Object.values(exportResponse.summary).some((value) => Number(value) !== 0)
+        const summaryValues = summaryHasData
+          ? buildFinanceReportValuesFromSummary(exportResponse.summary!)
           : {}
         const nextValues = {
           ...record.values,
@@ -1736,6 +1749,37 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
           generatedAt: exportResponse.generatedAt ?? exportResponse.createdAt,
           ...summaryValues,
         }
+        const period = (record.values.period ?? '').trim()
+        const periodPrefixMatch = period.match(/^(\d{2})\.(\d{4})$/)
+        const periodPrefix = periodPrefixMatch ? `${periodPrefixMatch[2]}-${periodPrefixMatch[1]}` : ''
+        const matchedInvoices = periodPrefix
+          ? financeInvoiceRecords.filter((inv) =>
+              (inv.values.dueDate ?? '').startsWith(periodPrefix),
+            )
+          : []
+        const matchedInvoiceNumbers = new Set(
+          matchedInvoices.map((inv) => inv.values.number || inv.id),
+        )
+        const matchedPayments = matchedInvoiceNumbers.size
+          ? financePaymentRecords.filter((pay) =>
+              matchedInvoiceNumbers.has(pay.values.invoice ?? ''),
+            )
+          : []
+        const relatedFromInvoices: EntityRelatedRecord[] = matchedInvoices.map((inv) => ({
+          id: `${record.id}-${inv.id}-inv`,
+          label: 'Счет',
+          value: inv.title || inv.id,
+          storeKey: FINANCE_INVOICES_STORE_KEY,
+          recordId: inv.id,
+        }))
+        const relatedFromPayments: EntityRelatedRecord[] = matchedPayments.map((pay) => ({
+          id: `${record.id}-${pay.id}-pay`,
+          label: 'Платеж',
+          value: pay.title || pay.id,
+          storeKey: FINANCE_PAYMENTS_STORE_KEY,
+          recordId: pay.id,
+        }))
+        const nextRelated = [...relatedFromInvoices, ...relatedFromPayments]
         updateRecord({
           storeKey,
           recordId: record.id,
@@ -1746,6 +1790,7 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
           note: exportResponse.downloadUrl
             ? 'Отчет сформирован и готов к скачиванию.'
             : 'Отчет сформирован.',
+          related: nextRelated.length > 0 ? nextRelated : record.related,
         })
       } catch (error) {
         setReportActionError(

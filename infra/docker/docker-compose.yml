@@ -294,6 +294,8 @@ services:
       <<: *svc-env
       OUTBOX_TARGETS: "http://finance-ledger:8080,http://analytics-marts:8080,http://notification:8080,http://audit-log:8080"
       OUTBOX_DISPATCH_ENABLED: "true"
+      FINANCE_INVOICING_DEV_SEED_ENABLED: "true"
+      PERSISTENCE_ENABLED: "false"
     ports:
       - "19086:8080"
 
@@ -316,6 +318,7 @@ services:
       <<: *svc-env
       OUTBOX_TARGETS: "http://analytics-marts:8080,http://notification:8080"
       OUTBOX_DISPATCH_ENABLED: "true"
+      FINANCE_INVOICING_BASE_URL: "http://finance-invoicing:8080"
     ports:
       - "19088:8080"
 

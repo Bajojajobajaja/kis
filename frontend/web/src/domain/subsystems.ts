@@ -256,6 +256,7 @@ const tabOverrides: Record<string, Partial<RawEntityTabDefinition>> = {
         { key: 'post', label: 'Сформировать', nextStatus: 'generated', critical: true },
       ],
       generated: [
+        { key: 'post', label: 'Сформировать заново', nextStatus: 'generated', critical: true },
         { key: 'archive', label: 'Архивировать', nextStatus: 'archived', critical: true },
       ],
     },

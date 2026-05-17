@@ -157,6 +157,7 @@ function resolveDownloadFileName(
 export async function exportFinanceReport(
   request: FinanceReportExportRequest,
 ): Promise<FinanceReportExportResponse> {
+  const idempotencyKey = `export-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
   const response = await requestJSON<FinanceReportExportResponseRaw>(
     `${FINANCE_REPORTING_API_BASE}/reports/export`,
     {
@@ -164,6 +165,7 @@ export async function exportFinanceReport(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(request),
     },

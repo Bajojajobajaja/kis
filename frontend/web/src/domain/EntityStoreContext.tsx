@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { synchronizeCarStatuses } from './carStatusSync'
 import { loadEntityStore, saveEntityStore } from './entityStoreApi'
 import { migrateEntityStore } from './entityStoreMigrations'
+import { syncFinanceInvoicingFromStore } from './financeInvoicingSync'
 import type { EntityRecord, EntityRelatedRecord } from './model'
 import { seedData } from './seedData'
 
@@ -24,6 +25,7 @@ type UpdateRecordInput = {
   values: Record<string, string>
   status?: string
   note?: string
+  related?: EntityRelatedRecord[]
 }
 
 type UpdateStatusInput = {
@@ -288,6 +290,17 @@ export function EntityStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const financeInvoicingSyncStartedRef = useRef(false)
+  useEffect(() => {
+    if (!isHydrated || financeInvoicingSyncStartedRef.current) {
+      return
+    }
+    financeInvoicingSyncStartedRef.current = true
+    void syncFinanceInvoicingFromStore(latestStoreRef.current).catch((error) => {
+      console.warn('Failed to sync finance-invoicing seed', error)
+    })
+  }, [isHydrated])
+
   useEffect(() => {
     if (!isHydrated) {
       return
@@ -386,6 +399,7 @@ export function EntityStoreProvider({ children }: { children: ReactNode }) {
                 subtitle: payload.subtitle,
                 status: payload.status ?? entity.status,
                 values: payload.values,
+                related: payload.related ?? entity.related,
               },
               payload.note ?? 'Карточка обновлена',
             )
