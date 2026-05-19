@@ -1,3 +1,4 @@
+import { synchronizeClientRelated } from './clientRelatedSync'
 import type { EntityHistoryRecord, EntityRecord } from './model'
 import { buildPlatformRoleValues } from './platform'
 
@@ -157,41 +158,26 @@ function invoiceRelated(
   ]
 }
 
-export const seedData: Record<string, EntityRecord[]> = {
+const rawSeedData: Record<string, EntityRecord[]> = {
   'crm-sales/clients': [
     row('CL-1001', 'ООО АВТОПАРК', 'Корпоративный клиент', 'active', {
       phone: '+7 (495) 701-22-10',
       owner: 'USR-4001',
       segment: 'Корпоративный',
       email: 'fleet@autopark.ru',
-    }, {
-      related: [
-        rel('CL-1001-car-1001', 'Автомобиль', 'CAR-1001 — Toyota Camry 2020 (VIN XW7BF4FK30S123456) • активна сделка DL-3001, открыт заказ-наряд WO-10031', 'crm-sales/cars', 'CAR-1001'),
-        rel('CL-1001-car-1004', 'Автомобиль', 'CAR-1004 — Volkswagen Tiguan 2022 (VIN WVGZZZ5NZNP112233)', 'crm-sales/cars', 'CAR-1004'),
-      ],
-    }),
+    }, { related: [] }),
     row('CL-1002', 'Иван Петров', 'Розничный клиент', 'paused', {
       phone: '+7 (926) 441-22-10',
       owner: 'USR-4002',
       segment: 'Розница',
       email: 'petrov@mail.ru',
-    }, {
-      related: [
-        rel('CL-1002-car-1002', 'Автомобиль', 'CAR-1002 — Hyundai Tucson 2021 (VIN KMHJB81BPNU191245) • в сервисе по WO-10032, активна сделка DL-3002', 'crm-sales/cars', 'CAR-1002'),
-        rel('CL-1002-car-1005', 'Автомобиль', 'CAR-1005 — BMW X5 2020 (VIN WBAKS610X0X334455)', 'crm-sales/cars', 'CAR-1005'),
-      ],
-    }),
+    }, { related: [] }),
     row('CL-1003', 'АО ТехТранс', 'Лизинговый клиент', 'archived', {
       phone: '+7 (495) 553-09-88',
       owner: 'USR-4001',
       segment: 'Лизинг',
       email: 'office@tehtrans.ru',
-    }, {
-      related: [
-        rel('CL-1003-car-1003', 'Автомобиль', 'CAR-1003 — KIA Sorento 2019 (VIN XWEPM81BDM0001183) • в архиве, сделка DL-3003 закрыта', 'crm-sales/cars', 'CAR-1003'),
-        rel('CL-1003-car-1006', 'Автомобиль', 'CAR-1006 — Skoda Octavia 2018 (VIN TMBJK7NE6J0123456)', 'crm-sales/cars', 'CAR-1006'),
-      ],
-    }),
+    }, { related: [] }),
     row('CL-1004', 'ООО ДрайвТорг', 'Корпоративный клиент', 'active', {
       phone: '+7 (495) 812-33-44',
       owner: 'USR-4001',
@@ -199,11 +185,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'info@drivetorg.ru',
     }, {
       history: historyMarch('cl-1004', 'Текущий статус: active'),
-      related: [
-        rel('CL-1004-car-1007', 'Автомобиль', 'CAR-1007 — Mazda CX-5 2022 (VIN JMZKE6HY3N1234567) • продан по сделке DL-3004', 'crm-sales/cars', 'CAR-1007'),
-        rel('CL-1004-car-1011', 'Автомобиль', 'CAR-1011 — Renault Duster 2021 (VIN VF1HSJD0H54123456) • в сервисе по WO-10037', 'crm-sales/cars', 'CAR-1011'),
-        rel('CL-1004-car-1015', 'Автомобиль', 'CAR-1015 — Volvo XC60 2022 (VIN YV4A22RK7N1234567) • активна сделка DL-3008', 'crm-sales/cars', 'CAR-1015'),
-      ],
+      related: [],
     }),
     row('CL-1005', 'Алексей Сидоров', 'Розничный клиент', 'active', {
       phone: '+7 (903) 555-12-34',
@@ -212,11 +194,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'sidorov.a@mail.ru',
     }, {
       history: historyMarch('cl-1005', 'Текущий статус: active'),
-      related: [
-        rel('CL-1005-car-1008', 'Автомобиль', 'CAR-1008 — Nissan Qashqai 2023 (VIN SJNFAAJ11U2345678) • в сервисе по WO-10034', 'crm-sales/cars', 'CAR-1008'),
-        rel('CL-1005-car-1009', 'Автомобиль', 'CAR-1009 — Audi A4 2021 (VIN WAUZZZ8V0NA123456) • продан по сделке DL-3005', 'crm-sales/cars', 'CAR-1009'),
-        rel('CL-1005-car-1016', 'Автомобиль', 'CAR-1016 — Geely Atlas Pro 2023 (VIN L6T78Y4E3NE123456) • продан по сделке DL-3009', 'crm-sales/cars', 'CAR-1016'),
-      ],
+      related: [],
     }),
     row('CL-1006', 'ИП Козлов К.К.', 'Малый бизнес', 'active', {
       phone: '+7 (916) 777-88-99',
@@ -225,10 +203,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'kozlov.kk@yandex.ru',
     }, {
       history: historyApril('cl-1006', 'Текущий статус: active'),
-      related: [
-        rel('CL-1006-car-1010', 'Автомобиль', 'CAR-1010 — Mercedes C-Class 2022 (VIN WDD2050881A234567) • активна сделка DL-3006', 'crm-sales/cars', 'CAR-1010'),
-        rel('CL-1006-car-1013', 'Автомобиль', 'CAR-1013 — Ford Kuga 2022 (VIN WF0XXXGCDXNY12345) • в сервисе по WO-10035', 'crm-sales/cars', 'CAR-1013'),
-      ],
+      related: [],
     }),
     row('CL-1007', 'АО МоторГрупп', 'Корпоративный клиент', 'active', {
       phone: '+7 (495) 600-70-80',
@@ -237,10 +212,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'office@motorgrupp.ru',
     }, {
       history: historyApril('cl-1007', 'Текущий статус: active'),
-      related: [
-        rel('CL-1007-car-1012', 'Автомобиль', 'CAR-1012 — Lexus RX 2023 (VIN JTJBAMCA1N2345678) • продан по сделке DL-3007', 'crm-sales/cars', 'CAR-1012'),
-        rel('CL-1007-car-1014', 'Автомобиль', 'CAR-1014 — Mitsubishi Outlander 2021 (VIN JMBXTGG3WNZ123456) • в сервисе по WO-10036', 'crm-sales/cars', 'CAR-1014'),
-      ],
+      related: [],
     }),
   ],
   'crm-sales/leads': [
@@ -1830,3 +1802,5 @@ export const seedData: Record<string, EntityRecord[]> = {
     }),
   ],
 }
+
+export const seedData: Record<string, EntityRecord[]> = synchronizeClientRelated(rawSeedData)

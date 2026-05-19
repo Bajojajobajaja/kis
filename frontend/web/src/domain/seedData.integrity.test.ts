@@ -238,14 +238,51 @@ describe('seedData integrity', () => {
     expect(errors).toEqual([])
   })
 
-  it('clients link only to cars (deals/orders/appointments reached via car)', () => {
+  it('clients link to their cars, deals and service activity', () => {
     const errors: string[] = []
-    const allowed = new Set(['crm-sales/cars'])
+    const allowed = new Set([
+      'crm-sales/cars',
+      'crm-sales/deals',
+      'service/orders',
+      'service/appointments',
+    ])
     for (const client of seedData['crm-sales/clients'] ?? []) {
       for (const r of client.related) {
         if (!r.storeKey) continue
         if (!allowed.has(r.storeKey)) {
-          errors.push(`${client.id} has direct link to ${r.storeKey}/${r.recordId} — should go via car`)
+          errors.push(`${client.id} unexpected related storeKey ${r.storeKey}`)
+        }
+      }
+      const hasCar = client.related.some((r) => r.storeKey === 'crm-sales/cars')
+      if (!hasCar) {
+        errors.push(`${client.id} expected at least one car link`)
+      }
+    }
+    expect(errors).toEqual([])
+  })
+
+  it('every workorder linked from a client matches one of the client cars by VIN', () => {
+    const errors: string[] = []
+    const cars = seedData['crm-sales/cars'] ?? []
+    const carsByVin = new Map(cars.map((c) => [(c.values.vin ?? '').toUpperCase(), c]))
+    for (const client of seedData['crm-sales/clients'] ?? []) {
+      const ownedVins = new Set(
+        cars
+          .filter((c) => (c.values.ownerClient ?? '').trim() === client.title.trim())
+          .map((c) => (c.values.vin ?? '').toUpperCase()),
+      )
+      for (const r of client.related) {
+        if (r.storeKey !== 'service/orders' && r.storeKey !== 'service/appointments') {
+          continue
+        }
+        const target = (seedData[r.storeKey] ?? []).find((rec) => rec.id === r.recordId)
+        const vin = (target?.values.vin ?? '').toUpperCase()
+        if (!vin || !carsByVin.has(vin)) {
+          errors.push(`${client.id} → ${r.storeKey}/${r.recordId}: missing or unknown VIN`)
+          continue
+        }
+        if (!ownedVins.has(vin)) {
+          errors.push(`${client.id} → ${r.storeKey}/${r.recordId}: VIN ${vin} not owned by client`)
         }
       }
     }

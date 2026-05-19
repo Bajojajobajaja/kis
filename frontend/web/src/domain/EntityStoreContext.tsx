@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { synchronizeCarStatuses } from './carStatusSync'
+import { synchronizeClientRelated } from './clientRelatedSync'
 import { loadEntityStore, saveEntityStore } from './entityStoreApi'
 import { migrateEntityStore } from './entityStoreMigrations'
 import { syncFinanceInvoicingFromStore } from './financeInvoicingSync'
@@ -173,7 +174,7 @@ function mergeHydratedStore(
 
 export function EntityStoreProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<Record<string, EntityRecord[]>>(() =>
-    synchronizeCarStatuses(cloneSeed()),
+    synchronizeClientRelated(synchronizeCarStatuses(cloneSeed())),
   )
   const [isHydrated, setIsHydrated] = useState(false)
   const latestStoreRef = useRef(store)
@@ -208,16 +209,18 @@ export function EntityStoreProvider({ children }: { children: ReactNode }) {
       }
     }
     return commitStore(
-      synchronizeCarStatuses(updater(latestStoreRef.current), {
-        onStatusChange: (record, nextStatus) =>
-          prependHistory(
-            {
-              ...record,
-              status: nextStatus,
-            },
-            AUTO_CAR_STATUS_SYNC_NOTE,
-          ),
-      }),
+      synchronizeClientRelated(
+        synchronizeCarStatuses(updater(latestStoreRef.current), {
+          onStatusChange: (record, nextStatus) =>
+            prependHistory(
+              {
+                ...record,
+                status: nextStatus,
+              },
+              AUTO_CAR_STATUS_SYNC_NOTE,
+            ),
+        }),
+      ),
     )
   }
 
@@ -261,16 +264,18 @@ export function EntityStoreProvider({ children }: { children: ReactNode }) {
         }
         if (hadPreHydrationMutationsRef.current) {
           commitStore(
-            synchronizeCarStatuses(
-              mergeHydratedStore(
-                persistedStore,
-                latestStoreRef.current,
-                deletedBeforeHydrationRef.current,
+            synchronizeClientRelated(
+              synchronizeCarStatuses(
+                mergeHydratedStore(
+                  persistedStore,
+                  latestStoreRef.current,
+                  deletedBeforeHydrationRef.current,
+                ),
               ),
             ),
           )
         } else if (Object.keys(persistedStore).length > 0) {
-          commitStore(synchronizeCarStatuses(persistedStore))
+          commitStore(synchronizeClientRelated(synchronizeCarStatuses(persistedStore)))
         }
       } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
