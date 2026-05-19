@@ -164,43 +164,107 @@ export const seedData: Record<string, EntityRecord[]> = {
       owner: 'USR-4001',
       segment: 'Корпоративный',
       email: 'fleet@autopark.ru',
+    }, {
+      related: [
+        rel('CL-1001-car-1001', 'Автомобиль', 'CAR-1001 — Toyota Camry 2020 (VIN XW7BF4FK30S123456)', 'crm-sales/cars', 'CAR-1001'),
+        rel('CL-1001-car-1004', 'Автомобиль', 'CAR-1004 — Volkswagen Tiguan 2022 (VIN WVGZZZ5NZNP112233)', 'crm-sales/cars', 'CAR-1004'),
+        rel('CL-1001-deal-3001', 'Сделка по CAR-1001', 'DL-3001 — Toyota Camry 2.5', 'crm-sales/deals', 'DL-3001'),
+        rel('CL-1001-wo-10031', 'Заказ-наряд по CAR-1001', 'WO-10031 — ТО + диагностика', 'service/orders', 'WO-10031'),
+        rel('CL-1001-ap-1102', 'Запись на сервис по CAR-1001', 'AP-1102 — Проверка кондиционера', 'service/appointments', 'AP-1102'),
+      ],
     }),
     row('CL-1002', 'Иван Петров', 'Розничный клиент', 'paused', {
       phone: '+7 (926) 441-22-10',
       owner: 'USR-4002',
       segment: 'Розница',
       email: 'petrov@mail.ru',
+    }, {
+      related: [
+        rel('CL-1002-car-1002', 'Автомобиль', 'CAR-1002 — Hyundai Tucson 2021 (VIN KMHJB81BPNU191245)', 'crm-sales/cars', 'CAR-1002'),
+        rel('CL-1002-car-1005', 'Автомобиль', 'CAR-1005 — BMW X5 2020 (VIN WBAKS610X0X334455)', 'crm-sales/cars', 'CAR-1005'),
+        rel('CL-1002-deal-3002', 'Сделка по CAR-1002', 'DL-3002 — Hyundai Tucson', 'crm-sales/deals', 'DL-3002'),
+        rel('CL-1002-wo-10032', 'Заказ-наряд по CAR-1002', 'WO-10032 — Ремонт ходовой части', 'service/orders', 'WO-10032'),
+        rel('CL-1002-ap-1101', 'Запись на сервис по CAR-1002', 'AP-1101 — Регламентное ТО', 'service/appointments', 'AP-1101'),
+      ],
     }),
     row('CL-1003', 'АО ТехТранс', 'Лизинговый клиент', 'archived', {
       phone: '+7 (495) 553-09-88',
       owner: 'USR-4001',
       segment: 'Лизинг',
       email: 'office@tehtrans.ru',
+    }, {
+      related: [
+        rel('CL-1003-car-1003', 'Автомобиль', 'CAR-1003 — KIA Sorento 2019 (VIN XWEPM81BDM0001183)', 'crm-sales/cars', 'CAR-1003'),
+        rel('CL-1003-car-1006', 'Автомобиль', 'CAR-1006 — Skoda Octavia 2018 (VIN TMBJK7NE6J0123456)', 'crm-sales/cars', 'CAR-1006'),
+        rel('CL-1003-deal-3003', 'Сделка по CAR-1003', 'DL-3003 — KIA Sorento (закрыта)', 'crm-sales/deals', 'DL-3003'),
+        rel('CL-1003-wo-10033', 'Заказ-наряд по CAR-1003', 'WO-10033 — Проверка после ремонта', 'service/orders', 'WO-10033'),
+        rel('CL-1003-ap-1103', 'Запись на сервис по CAR-1003', 'AP-1103 — Экстренный ремонт', 'service/appointments', 'AP-1103'),
+      ],
     }),
     row('CL-1004', 'ООО ДрайвТорг', 'Корпоративный клиент', 'active', {
       phone: '+7 (495) 812-33-44',
       owner: 'USR-4001',
       segment: 'Корпоративный',
       email: 'info@drivetorg.ru',
-    }, { history: historyMarch('cl-1004', 'Текущий статус: active') }),
+    }, {
+      history: historyMarch('cl-1004', 'Текущий статус: active'),
+      related: [
+        rel('CL-1004-car-1007', 'Автомобиль', 'CAR-1007 — Mazda CX-5 2022 (VIN JMZKE6HY3N1234567)', 'crm-sales/cars', 'CAR-1007'),
+        rel('CL-1004-car-1011', 'Автомобиль', 'CAR-1011 — Renault Duster 2021 (VIN VF1HSJD0H54123456)', 'crm-sales/cars', 'CAR-1011'),
+        rel('CL-1004-car-1015', 'Автомобиль', 'CAR-1015 — Volvo XC60 2022 (VIN YV4A22RK7N1234567)', 'crm-sales/cars', 'CAR-1015'),
+        rel('CL-1004-deal-3004', 'Сделка по CAR-1007', 'DL-3004 — Mazda CX-5 2022 (закрыта)', 'crm-sales/deals', 'DL-3004'),
+        rel('CL-1004-deal-3008', 'Сделка по CAR-1015', 'DL-3008 — Volvo XC60 2022', 'crm-sales/deals', 'DL-3008'),
+        rel('CL-1004-wo-10037', 'Заказ-наряд по CAR-1011', 'WO-10037 — ТО-60 + фильтры', 'service/orders', 'WO-10037'),
+        rel('CL-1004-ap-1107', 'Запись на сервис по CAR-1011', 'AP-1107 — ТО-60 Renault Duster', 'service/appointments', 'AP-1107'),
+      ],
+    }),
     row('CL-1005', 'Алексей Сидоров', 'Розничный клиент', 'active', {
       phone: '+7 (903) 555-12-34',
       owner: 'USR-4002',
       segment: 'Розница',
       email: 'sidorov.a@mail.ru',
-    }, { history: historyMarch('cl-1005', 'Текущий статус: active') }),
+    }, {
+      history: historyMarch('cl-1005', 'Текущий статус: active'),
+      related: [
+        rel('CL-1005-car-1008', 'Автомобиль', 'CAR-1008 — Nissan Qashqai 2023 (VIN SJNFAAJ11U2345678)', 'crm-sales/cars', 'CAR-1008'),
+        rel('CL-1005-car-1009', 'Автомобиль', 'CAR-1009 — Audi A4 2021 (VIN WAUZZZ8V0NA123456)', 'crm-sales/cars', 'CAR-1009'),
+        rel('CL-1005-car-1016', 'Автомобиль', 'CAR-1016 — Geely Atlas Pro 2023 (VIN L6T78Y4E3NE123456)', 'crm-sales/cars', 'CAR-1016'),
+        rel('CL-1005-deal-3005', 'Сделка по CAR-1009', 'DL-3005 — Audi A4 2021 (закрыта)', 'crm-sales/deals', 'DL-3005'),
+        rel('CL-1005-deal-3009', 'Сделка по CAR-1016', 'DL-3009 — Geely Atlas Pro 2023 (закрыта)', 'crm-sales/deals', 'DL-3009'),
+        rel('CL-1005-wo-10034', 'Заказ-наряд по CAR-1008', 'WO-10034 — ТО + замена масла', 'service/orders', 'WO-10034'),
+        rel('CL-1005-ap-1104', 'Запись на сервис по CAR-1008', 'AP-1104 — Замена масла Nissan Qashqai', 'service/appointments', 'AP-1104'),
+      ],
+    }),
     row('CL-1006', 'ИП Козлов К.К.', 'Малый бизнес', 'active', {
       phone: '+7 (916) 777-88-99',
       owner: 'USR-4001',
       segment: 'Малый бизнес',
       email: 'kozlov.kk@yandex.ru',
-    }, { history: historyApril('cl-1006', 'Текущий статус: active') }),
+    }, {
+      history: historyApril('cl-1006', 'Текущий статус: active'),
+      related: [
+        rel('CL-1006-car-1010', 'Автомобиль', 'CAR-1010 — Mercedes C-Class 2022 (VIN WDD2050881A234567)', 'crm-sales/cars', 'CAR-1010'),
+        rel('CL-1006-car-1013', 'Автомобиль', 'CAR-1013 — Ford Kuga 2022 (VIN WF0XXXGCDXNY12345)', 'crm-sales/cars', 'CAR-1013'),
+        rel('CL-1006-deal-3006', 'Сделка по CAR-1010', 'DL-3006 — Mercedes C-Class 2022', 'crm-sales/deals', 'DL-3006'),
+        rel('CL-1006-wo-10035', 'Заказ-наряд по CAR-1013', 'WO-10035 — Ремонт подвески (закрыт)', 'service/orders', 'WO-10035'),
+        rel('CL-1006-ap-1105', 'Запись на сервис по CAR-1013', 'AP-1105 — Ремонт подвески Ford Kuga', 'service/appointments', 'AP-1105'),
+      ],
+    }),
     row('CL-1007', 'АО МоторГрупп', 'Корпоративный клиент', 'active', {
       phone: '+7 (495) 600-70-80',
       owner: 'USR-4002',
       segment: 'Корпоративный',
       email: 'office@motorgrupp.ru',
-    }, { history: historyApril('cl-1007', 'Текущий статус: active') }),
+    }, {
+      history: historyApril('cl-1007', 'Текущий статус: active'),
+      related: [
+        rel('CL-1007-car-1012', 'Автомобиль', 'CAR-1012 — Lexus RX 2023 (VIN JTJBAMCA1N2345678)', 'crm-sales/cars', 'CAR-1012'),
+        rel('CL-1007-car-1014', 'Автомобиль', 'CAR-1014 — Mitsubishi Outlander 2021 (VIN JMBXTGG3WNZ123456)', 'crm-sales/cars', 'CAR-1014'),
+        rel('CL-1007-deal-3007', 'Сделка по CAR-1012', 'DL-3007 — Lexus RX 2023 (закрыта)', 'crm-sales/deals', 'DL-3007'),
+        rel('CL-1007-wo-10036', 'Заказ-наряд по CAR-1014', 'WO-10036 — Диагностика двигателя', 'service/orders', 'WO-10036'),
+        rel('CL-1007-ap-1106', 'Запись на сервис по CAR-1014', 'AP-1106 — Диагностика Outlander', 'service/appointments', 'AP-1106'),
+      ],
+    }),
   ],
   'crm-sales/leads': [
     row('LD-2001', 'Заявка с сайта: Toyota Camry', 'Сайт / Форма обратной связи', 'new', {
@@ -214,12 +278,6 @@ export const seedData: Record<string, EntityRecord[]> = {
       source: 'Контакт-центр',
       manager: 'USR-4002',
       phone: '+7 (901) 555-17-33',
-    }),
-    row('LD-2003', 'Запрос из мессенджера', 'Telegram бот', 'lost', {
-      channel: 'Мессенджер',
-      source: 'Telegram',
-      manager: 'USR-4001',
-      phone: '+7 (977) 300-11-42',
     }),
   ],
   'crm-sales/deals': [
@@ -510,6 +568,13 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Черный',
       ownerClient: 'ООО АВТОПАРК',
       note: 'Основной автомобиль парка',
+    }, {
+      related: [
+        rel('CAR-1001-client', 'Клиент-владелец', 'CL-1001 — ООО АВТОПАРК', 'crm-sales/clients', 'CL-1001'),
+        rel('CAR-1001-deal', 'Сделка', 'DL-3001 — Toyota Camry 2.5', 'crm-sales/deals', 'DL-3001'),
+        rel('CAR-1001-wo', 'Заказ-наряд', 'WO-10031 — ТО + диагностика', 'service/orders', 'WO-10031'),
+        rel('CAR-1001-ap', 'Запись на сервис', 'AP-1102 — Проверка кондиционера', 'service/appointments', 'AP-1102'),
+      ],
     }),
     row('CAR-1002', 'Hyundai Tucson 2021', 'Авто по сервисному контракту', 'in_service', {
       vin: 'KMHJB81BPNU191245',
@@ -522,6 +587,13 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Белый',
       ownerClient: 'Иван Петров',
       note: 'Плановое обслуживание',
+    }, {
+      related: [
+        rel('CAR-1002-client', 'Клиент-владелец', 'CL-1002 — Иван Петров', 'crm-sales/clients', 'CL-1002'),
+        rel('CAR-1002-deal', 'Сделка', 'DL-3002 — Hyundai Tucson', 'crm-sales/deals', 'DL-3002'),
+        rel('CAR-1002-wo', 'Заказ-наряд', 'WO-10032 — Ремонт ходовой части', 'service/orders', 'WO-10032'),
+        rel('CAR-1002-ap', 'Запись на сервис', 'AP-1101 — Регламентное ТО', 'service/appointments', 'AP-1101'),
+      ],
     }),
     row('CAR-1003', 'KIA Sorento 2019', 'Архивный автомобиль по контракту', 'archived', {
       vin: 'XWEPM81BDM0001183',
@@ -534,6 +606,13 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Серый',
       ownerClient: 'АО ТехТранс',
       note: 'В архиве после списания',
+    }, {
+      related: [
+        rel('CAR-1003-client', 'Клиент-владелец', 'CL-1003 — АО ТехТранс', 'crm-sales/clients', 'CL-1003'),
+        rel('CAR-1003-deal', 'Сделка', 'DL-3003 — KIA Sorento (закрыта)', 'crm-sales/deals', 'DL-3003'),
+        rel('CAR-1003-wo', 'Заказ-наряд', 'WO-10033 — Проверка после ремонта', 'service/orders', 'WO-10033'),
+        rel('CAR-1003-ap', 'Запись на сервис', 'AP-1103 — Экстренный ремонт', 'service/appointments', 'AP-1103'),
+      ],
     }),
     row('CAR-1004', 'Volkswagen Tiguan 2022', 'Демо-кроссовер', 'active', {
       vin: 'WVGZZZ5NZNP112233',
@@ -546,6 +625,10 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Синий',
       ownerClient: 'ООО АВТОПАРК',
       note: 'Демонстрационный автомобиль дилера',
+    }, {
+      related: [
+        rel('CAR-1004-client', 'Клиент-владелец', 'CL-1001 — ООО АВТОПАРК', 'crm-sales/clients', 'CL-1001'),
+      ],
     }),
     row('CAR-1005', 'BMW X5 2020', 'Премиальный внедорожник', 'active', {
       vin: 'WBAKS610X0X334455',
@@ -558,6 +641,10 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Черный',
       ownerClient: 'Иван Петров',
       note: 'Корпоративный лизинг',
+    }, {
+      related: [
+        rel('CAR-1005-client', 'Клиент-владелец', 'CL-1002 — Иван Петров', 'crm-sales/clients', 'CL-1002'),
+      ],
     }),
     row('CAR-1006', 'Skoda Octavia 2018', 'Седан для парка', 'in_service', {
       vin: 'TMBJK7NE6J0123456',
@@ -570,57 +657,125 @@ export const seedData: Record<string, EntityRecord[]> = {
       color: 'Белый',
       ownerClient: 'АО ТехТранс',
       note: 'Большой пробег, обслуживание продолжается',
+    }, {
+      related: [
+        rel('CAR-1006-client', 'Клиент-владелец', 'CL-1003 — АО ТехТранс', 'crm-sales/clients', 'CL-1003'),
+      ],
     }),
     row('CAR-1007', 'Mazda CX-5 2022', 'Кроссовер для лизинга', 'sold', {
       vin: 'JMZKE6HY3N1234567', brand: 'Mazda', model: 'CX-5', year: '2022',
       price: '2 900 000', plateNumber: 'G123HJ77', mileage: '28000', color: 'Красный',
       ownerClient: 'ООО ДрайвТорг', note: 'Продан в марте',
-    }, { history: historyMarch('car-1007', 'Текущий статус: sold') }),
+    }, {
+      history: historyMarch('car-1007', 'Текущий статус: sold'),
+      related: [
+        rel('CAR-1007-client', 'Клиент-владелец', 'CL-1004 — ООО ДрайвТорг', 'crm-sales/clients', 'CL-1004'),
+        rel('CAR-1007-deal', 'Сделка', 'DL-3004 — Mazda CX-5 2022 (закрыта)', 'crm-sales/deals', 'DL-3004'),
+      ],
+    }),
     row('CAR-1008', 'Nissan Qashqai 2023', 'Городской кроссовер', 'in_service', {
       vin: 'SJNFAAJ11U2345678', brand: 'Nissan', model: 'Qashqai', year: '2023',
       price: '2 400 000', plateNumber: 'H456JK77', mileage: '12000', color: 'Серебристый',
       ownerClient: 'Алексей Сидоров', note: 'На сервисном обслуживании',
-    }, { history: historyMarch('car-1008', 'Текущий статус: in_service') }),
+    }, {
+      history: historyMarch('car-1008', 'Текущий статус: in_service'),
+      related: [
+        rel('CAR-1008-client', 'Клиент-владелец', 'CL-1005 — Алексей Сидоров', 'crm-sales/clients', 'CL-1005'),
+        rel('CAR-1008-wo', 'Заказ-наряд', 'WO-10034 — ТО + замена масла', 'service/orders', 'WO-10034'),
+        rel('CAR-1008-ap', 'Запись на сервис', 'AP-1104 — Замена масла Nissan Qashqai', 'service/appointments', 'AP-1104'),
+      ],
+    }),
     row('CAR-1009', 'Audi A4 2021', 'Бизнес-седан', 'sold', {
       vin: 'WAUZZZ8V0NA123456', brand: 'Audi', model: 'A4', year: '2021',
       price: '3 600 000', plateNumber: 'J789KL77', mileage: '35000', color: 'Чёрный',
       ownerClient: 'Алексей Сидоров', note: 'Продан в марте',
-    }, { history: historyMarch('car-1009', 'Текущий статус: sold') }),
+    }, {
+      history: historyMarch('car-1009', 'Текущий статус: sold'),
+      related: [
+        rel('CAR-1009-client', 'Клиент-владелец', 'CL-1005 — Алексей Сидоров', 'crm-sales/clients', 'CL-1005'),
+        rel('CAR-1009-deal', 'Сделка', 'DL-3005 — Audi A4 2021 (закрыта)', 'crm-sales/deals', 'DL-3005'),
+      ],
+    }),
     row('CAR-1010', 'Mercedes C-Class 2022', 'Представительский седан', 'active', {
       vin: 'WDD2050881A234567', brand: 'Mercedes-Benz', model: 'C-Class', year: '2022',
       price: '4 200 000', plateNumber: 'K012MN77', mileage: '18000', color: 'Белый',
       ownerClient: 'ИП Козлов К.К.', note: 'В процессе сделки',
-    }, { history: historyMarch('car-1010', 'Текущий статус: active') }),
+    }, {
+      history: historyMarch('car-1010', 'Текущий статус: active'),
+      related: [
+        rel('CAR-1010-client', 'Клиент-владелец', 'CL-1006 — ИП Козлов К.К.', 'crm-sales/clients', 'CL-1006'),
+        rel('CAR-1010-deal', 'Сделка', 'DL-3006 — Mercedes C-Class 2022', 'crm-sales/deals', 'DL-3006'),
+      ],
+    }),
     row('CAR-1011', 'Renault Duster 2021', 'Бюджетный внедорожник', 'in_service', {
       vin: 'VF1HSJD0H54123456', brand: 'Renault', model: 'Duster', year: '2021',
       price: '1 350 000', plateNumber: 'L345OP77', mileage: '67000', color: 'Зелёный',
       ownerClient: 'ООО ДрайвТорг', note: 'На ТО в апреле',
-    }, { history: historyApril('car-1011', 'Текущий статус: in_service') }),
+    }, {
+      history: historyApril('car-1011', 'Текущий статус: in_service'),
+      related: [
+        rel('CAR-1011-client', 'Клиент-владелец', 'CL-1004 — ООО ДрайвТорг', 'crm-sales/clients', 'CL-1004'),
+        rel('CAR-1011-wo', 'Заказ-наряд', 'WO-10037 — ТО-60 + фильтры', 'service/orders', 'WO-10037'),
+        rel('CAR-1011-ap', 'Запись на сервис', 'AP-1107 — ТО-60 Renault Duster', 'service/appointments', 'AP-1107'),
+      ],
+    }),
     row('CAR-1012', 'Lexus RX 2023', 'Премиальный кроссовер', 'sold', {
       vin: 'JTJBAMCA1N2345678', brand: 'Lexus', model: 'RX', year: '2023',
       price: '5 100 000', plateNumber: 'M678QR77', mileage: '8000', color: 'Тёмно-синий',
       ownerClient: 'АО МоторГрупп', note: 'Продан в апреле',
-    }, { history: historyApril('car-1012', 'Текущий статус: sold') }),
+    }, {
+      history: historyApril('car-1012', 'Текущий статус: sold'),
+      related: [
+        rel('CAR-1012-client', 'Клиент-владелец', 'CL-1007 — АО МоторГрупп', 'crm-sales/clients', 'CL-1007'),
+        rel('CAR-1012-deal', 'Сделка', 'DL-3007 — Lexus RX 2023 (закрыта)', 'crm-sales/deals', 'DL-3007'),
+      ],
+    }),
     row('CAR-1013', 'Ford Kuga 2022', 'Компактный кроссовер', 'in_service', {
       vin: 'WF0XXXGCDXNY12345', brand: 'Ford', model: 'Kuga', year: '2022',
       price: '2 200 000', plateNumber: 'N901ST77', mileage: '41000', color: 'Оранжевый',
       ownerClient: 'ИП Козлов К.К.', note: 'Ремонт подвески',
-    }, { history: historyMarch('car-1013', 'Текущий статус: in_service') }),
+    }, {
+      history: historyMarch('car-1013', 'Текущий статус: in_service'),
+      related: [
+        rel('CAR-1013-client', 'Клиент-владелец', 'CL-1006 — ИП Козлов К.К.', 'crm-sales/clients', 'CL-1006'),
+        rel('CAR-1013-wo', 'Заказ-наряд', 'WO-10035 — Ремонт подвески (закрыт)', 'service/orders', 'WO-10035'),
+        rel('CAR-1013-ap', 'Запись на сервис', 'AP-1105 — Ремонт подвески Ford Kuga', 'service/appointments', 'AP-1105'),
+      ],
+    }),
     row('CAR-1014', 'Mitsubishi Outlander 2021', 'Семейный внедорожник', 'in_service', {
       vin: 'JMBXTGG3WNZ123456', brand: 'Mitsubishi', model: 'Outlander', year: '2021',
       price: '2 800 000', plateNumber: 'P234UV77', mileage: '55000', color: 'Серый',
       ownerClient: 'АО МоторГрупп', note: 'Диагностика в апреле',
-    }, { history: historyApril('car-1014', 'Текущий статус: in_service') }),
+    }, {
+      history: historyApril('car-1014', 'Текущий статус: in_service'),
+      related: [
+        rel('CAR-1014-client', 'Клиент-владелец', 'CL-1007 — АО МоторГрупп', 'crm-sales/clients', 'CL-1007'),
+        rel('CAR-1014-wo', 'Заказ-наряд', 'WO-10036 — Диагностика двигателя', 'service/orders', 'WO-10036'),
+        rel('CAR-1014-ap', 'Запись на сервис', 'AP-1106 — Диагностика Outlander', 'service/appointments', 'AP-1106'),
+      ],
+    }),
     row('CAR-1015', 'Volvo XC60 2022', 'Премиальный кроссовер', 'active', {
       vin: 'YV4A22RK7N1234567', brand: 'Volvo', model: 'XC60', year: '2022',
       price: '4 800 000', plateNumber: 'R567WX77', mileage: '22000', color: 'Бежевый',
       ownerClient: 'ООО ДрайвТорг', note: 'В процессе сделки',
-    }, { history: historyApril('car-1015', 'Текущий статус: active') }),
+    }, {
+      history: historyApril('car-1015', 'Текущий статус: active'),
+      related: [
+        rel('CAR-1015-client', 'Клиент-владелец', 'CL-1004 — ООО ДрайвТорг', 'crm-sales/clients', 'CL-1004'),
+        rel('CAR-1015-deal', 'Сделка', 'DL-3008 — Volvo XC60 2022', 'crm-sales/deals', 'DL-3008'),
+      ],
+    }),
     row('CAR-1016', 'Geely Atlas Pro 2023', 'Городской кроссовер', 'sold', {
       vin: 'L6T78Y4E3NE123456', brand: 'Geely', model: 'Atlas Pro', year: '2023',
       price: '1 450 000', plateNumber: 'S890YZ77', mileage: '5000', color: 'Белый',
       ownerClient: 'Алексей Сидоров', note: 'Продан в апреле',
-    }, { history: historyApril('car-1016', 'Текущий статус: sold') }),
+    }, {
+      history: historyApril('car-1016', 'Текущий статус: sold'),
+      related: [
+        rel('CAR-1016-client', 'Клиент-владелец', 'CL-1005 — Алексей Сидоров', 'crm-sales/clients', 'CL-1005'),
+        rel('CAR-1016-deal', 'Сделка', 'DL-3009 — Geely Atlas Pro 2023 (закрыта)', 'crm-sales/deals', 'DL-3009'),
+      ],
+    }),
   ],
   'service/orders': [
     row('WO-10031', 'Заказ-наряд WO-10031', 'ТО + диагностика', 'opened', {
