@@ -26,7 +26,7 @@ const workingActions: ActionKey[] = [
 ]
 
 const mechanicActions: ActionKey[] = [...workingActions, 'writeoff']
-const analystReportActions: ActionKey[] = ['create', 'edit', 'post', 'archive', 'reopen']
+const analystReportActions: ActionKey[] = ['create', 'edit', 'post', 'archive', 'reopen', 'delete']
 
 const actionLabels: Record<ActionKey, string> = {
   create: 'создание',

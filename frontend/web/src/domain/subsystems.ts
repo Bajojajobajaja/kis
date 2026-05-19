@@ -254,10 +254,15 @@ const tabOverrides: Record<string, Partial<RawEntityTabDefinition>> = {
       draft: [
         { key: 'edit', label: 'Редактировать' },
         { key: 'post', label: 'Сформировать', nextStatus: 'generated', critical: true },
+        { key: 'delete', label: 'Удалить', critical: true },
       ],
       generated: [
         { key: 'post', label: 'Сформировать заново', nextStatus: 'generated', critical: true },
         { key: 'archive', label: 'Архивировать', nextStatus: 'archived', critical: true },
+        { key: 'delete', label: 'Удалить', critical: true },
+      ],
+      archived: [
+        { key: 'delete', label: 'Удалить', critical: true },
       ],
     },
   },
