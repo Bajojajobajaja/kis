@@ -2,9 +2,12 @@ package httptransport
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -325,6 +328,123 @@ func TestWriteoffIssuesStockAndIsIdempotent(t *testing.T) {
 	}
 	if issueCalls != 1 {
 		t.Fatalf("expected repeat writeoff not to issue stock again, got %d calls", issueCalls)
+	}
+}
+
+func TestConcurrentWriteoffIssuesStockExactlyOnce(t *testing.T) {
+	resetPartsStore()
+
+	lookupInventoryStockBySKU = func(sku string) (inventoryStockLookupResult, error) {
+		return inventoryStockLookupResult{
+			Found:     true,
+			Available: 10,
+			Item:      inventoryStockItem{SKU: sku, Location: "main", OnHand: 10},
+		}, nil
+	}
+
+	var issueCalls int64
+	releaseIssue := make(chan struct{})
+	issueInventoryStock = func(req inventoryStockIssueRequest) (inventoryStockItem, error) {
+		atomic.AddInt64(&issueCalls, 1)
+		<-releaseIssue
+		return inventoryStockItem{SKU: req.SKU, Location: req.Location, OnHand: 8}, nil
+	}
+	updateExternalWorkorderStatus = func(string, string) error { return nil }
+
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	saveReq := httptest.NewRequest(http.MethodPut, "/workorders/WO-PAR/parts-plan",
+		strings.NewReader(`{"lines":[{"sku":"PART-OIL","title":"Oil","quantity":2}]}`))
+	saveReq.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(httptest.NewRecorder(), saveReq)
+
+	const callers = 5
+	var conflict int64
+	var success int64
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/workorders/WO-PAR/writeoff", nil)
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+			switch rr.Code {
+			case http.StatusOK:
+				atomic.AddInt64(&success, 1)
+			case http.StatusConflict:
+				atomic.AddInt64(&conflict, 1)
+			default:
+				t.Errorf("unexpected status %d", rr.Code)
+			}
+		}()
+	}
+	close(releaseIssue)
+	wg.Wait()
+
+	if got := atomic.LoadInt64(&issueCalls); got != 1 {
+		t.Fatalf("expected exactly one stock issue call across %d callers, got %d", callers, got)
+	}
+	if atomic.LoadInt64(&success) < 1 {
+		t.Fatalf("expected at least one successful writeoff")
+	}
+	if atomic.LoadInt64(&success)+atomic.LoadInt64(&conflict) != callers {
+		t.Fatalf("every caller should resolve to OK or Conflict")
+	}
+}
+
+func TestWriteoffReservationReleasedOnIssueFailure(t *testing.T) {
+	resetPartsStore()
+
+	lookupInventoryStockBySKU = func(sku string) (inventoryStockLookupResult, error) {
+		return inventoryStockLookupResult{
+			Found:     true,
+			Available: 10,
+			Item:      inventoryStockItem{SKU: sku, Location: "main", OnHand: 10},
+		}, nil
+	}
+	var fail atomic.Bool
+	fail.Store(true)
+	var issueCalls int64
+	issueInventoryStock = func(req inventoryStockIssueRequest) (inventoryStockItem, error) {
+		atomic.AddInt64(&issueCalls, 1)
+		if fail.Load() {
+			return inventoryStockItem{}, fmt.Errorf("stock service unavailable")
+		}
+		return inventoryStockItem{SKU: req.SKU, Location: req.Location, OnHand: 8}, nil
+	}
+	updateExternalWorkorderStatus = func(string, string) error { return nil }
+
+	mux := http.NewServeMux()
+	RegisterHandlers(mux)
+
+	saveReq := httptest.NewRequest(http.MethodPut, "/workorders/WO-RETRY/parts-plan",
+		strings.NewReader(`{"lines":[{"sku":"PART-OIL","title":"Oil","quantity":2}]}`))
+	saveReq.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(httptest.NewRecorder(), saveReq)
+
+	firstRR := httptest.NewRecorder()
+	mux.ServeHTTP(firstRR, httptest.NewRequest(http.MethodPost, "/workorders/WO-RETRY/writeoff", nil))
+	if firstRR.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 on issue failure, got %d", firstRR.Code)
+	}
+
+	partsStore.RLock()
+	state := partsStore.plans["WO-RETRY"][0].State
+	partsStore.RUnlock()
+	if state != "draft" {
+		t.Fatalf("expected reservation rolled back to draft, got %q", state)
+	}
+
+	fail.Store(false)
+	retryRR := httptest.NewRecorder()
+	mux.ServeHTTP(retryRR, httptest.NewRequest(http.MethodPost, "/workorders/WO-RETRY/writeoff", nil))
+	if retryRR.Code != http.StatusOK {
+		t.Fatalf("expected retry to succeed, got %d", retryRR.Code)
+	}
+	if got := atomic.LoadInt64(&issueCalls); got != 2 {
+		t.Fatalf("expected 2 issue calls (one failed, one retry), got %d", got)
 	}
 }
 

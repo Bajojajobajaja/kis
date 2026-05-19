@@ -150,6 +150,8 @@ var issueInventoryStock = defaultIssueInventoryStock
 var createExternalProcurementRequest = defaultCreateExternalProcurementRequest
 var updateExternalWorkorderStatus = defaultUpdateExternalWorkorderStatus
 
+var writeoffInFlight sync.Map
+
 func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", healthHandler)
 	mux.HandleFunc("/readyz", readyHandler)
@@ -388,6 +390,12 @@ func handleWorkorderWriteoff(w http.ResponseWriter, r *http.Request, workorderID
 		return
 	}
 
+	if _, loaded := writeoffInFlight.LoadOrStore(workorderID, struct{}{}); loaded {
+		respondError(w, http.StatusConflict, "writeoff is already in progress for this workorder")
+		return
+	}
+	defer writeoffInFlight.Delete(workorderID)
+
 	lines := copyPlanLines(workorderID)
 	if len(lines) == 0 {
 		respondError(w, http.StatusBadRequest, "parts plan is empty")
@@ -396,7 +404,7 @@ func handleWorkorderWriteoff(w http.ResponseWriter, r *http.Request, workorderID
 
 	pending := make([]workorderPartsPlanLine, 0, len(lines))
 	for _, line := range lines {
-		if line.State != "written_off" {
+		if line.State != "written_off" && line.State != "writing_off" {
 			pending = append(pending, line)
 		}
 	}
@@ -529,11 +537,48 @@ func handleWorkorderWriteoff(w http.ResponseWriter, r *http.Request, workorderID
 	}
 
 	issuedViews := make([]workorderPartsPlanLineView, 0, len(checks))
+
+	// Reserve the pending lines atomically by marking them writing_off. This
+	// guards against a concurrent or retried writeoff seeing the same plan
+	// rows as pending and issuing stock a second time.
+	reservedSKUs := make(map[string]struct{}, len(checks))
 	partsStore.Lock()
 	current := append([]workorderPartsPlanLine(nil), partsStore.plans[workorderID]...)
+	for _, check := range checks {
+		for index := range current {
+			if current[index].SKU != check.Line.SKU {
+				continue
+			}
+			if current[index].State == "written_off" || current[index].State == "writing_off" {
+				break
+			}
+			current[index].State = "writing_off"
+			reservedSKUs[current[index].SKU] = struct{}{}
+			break
+		}
+	}
+	partsStore.plans[workorderID] = current
 	partsStore.Unlock()
 
+	releaseReservations := func() {
+		partsStore.Lock()
+		latest := append([]workorderPartsPlanLine(nil), partsStore.plans[workorderID]...)
+		for index := range latest {
+			if _, ok := reservedSKUs[latest[index].SKU]; !ok {
+				continue
+			}
+			if latest[index].State == "writing_off" {
+				latest[index].State = "draft"
+			}
+		}
+		partsStore.plans[workorderID] = latest
+		partsStore.Unlock()
+	}
+
 	for _, check := range checks {
+		if _, reserved := reservedSKUs[check.Line.SKU]; !reserved {
+			continue
+		}
 		location := "main"
 		if check.Lookup.Found && strings.TrimSpace(check.Lookup.Item.Location) != "" {
 			location = check.Lookup.Item.Location
@@ -545,6 +590,7 @@ func handleWorkorderWriteoff(w http.ResponseWriter, r *http.Request, workorderID
 			Source:    "service-parts-usage",
 			Reference: workorderID,
 		}); err != nil {
+			releaseReservations()
 			respondError(w, http.StatusBadGateway, err.Error())
 			return
 		}
@@ -560,7 +606,11 @@ func handleWorkorderWriteoff(w http.ResponseWriter, r *http.Request, workorderID
 	}
 
 	partsStore.Lock()
+	current = append([]workorderPartsPlanLine(nil), partsStore.plans[workorderID]...)
 	for _, check := range checks {
+		if _, reserved := reservedSKUs[check.Line.SKU]; !reserved {
+			continue
+		}
 		for index := range current {
 			if current[index].SKU != check.Line.SKU {
 				continue
