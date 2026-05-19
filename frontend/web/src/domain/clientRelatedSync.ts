@@ -12,6 +12,14 @@ function normalizeVIN(value: string | undefined): string {
   return (value ?? '').trim().toUpperCase()
 }
 
+function normalizeName(value: string | undefined): string {
+  return (value ?? '')
+    .replace(/ /g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
 function buildRelatedId(clientId: string, storeKey: string, recordId: string): string {
   return `auto-${clientId}-${storeKey}-${recordId}`
 }
@@ -79,36 +87,81 @@ export function deriveClientRelated(
   const workorders = store[SERVICE_ORDERS_STORE_KEY] ?? []
   const appointments = store[SERVICE_APPOINTMENTS_STORE_KEY] ?? []
 
-  const clientTitle = client.title.trim()
-  const clientCars = cars.filter((car) => (car.values.ownerClient ?? '').trim() === clientTitle)
+  const clientName = normalizeName(client.title)
 
-  const clientCarIds = new Set(clientCars.map((car) => car.id))
-  const clientCarVins = new Set(
-    clientCars
-      .map((car) => normalizeVIN(car.values.vin))
-      .filter((vin) => vin.length > 0),
-  )
+  // Step 1: deals that explicitly belong to this client (by name).
+  const ownedDeals = deals.filter((deal) => {
+    const dealClient = normalizeName(deal.values.client)
+    return dealClient.length > 0 && dealClient === clientName
+  })
 
-  const carItems = clientCars.map((car) =>
+  // Step 2: cars that belong to this client — directly via ownerClient OR
+  // transitively via cars referenced by the client's deals.
+  const ownedCarIds = new Set<string>()
+  const ownedCarVins = new Set<string>()
+
+  for (const car of cars) {
+    if (normalizeName(car.values.ownerClient) === clientName && clientName.length > 0) {
+      ownedCarIds.add(car.id)
+      const vin = normalizeVIN(car.values.vin)
+      if (vin) ownedCarVins.add(vin)
+    }
+  }
+
+  for (const deal of ownedDeals) {
+    const carId = (deal.values.carRecordId ?? '').trim()
+    if (carId) ownedCarIds.add(carId)
+    const dealVin = normalizeVIN(deal.values.vin)
+    if (dealVin) ownedCarVins.add(dealVin)
+    for (const r of deal.related) {
+      if (r.storeKey === CARS_STORE_KEY && r.recordId) {
+        ownedCarIds.add(r.recordId)
+      }
+    }
+  }
+
+  // Reverse-lookup: pull in car records for any ids we've discovered, and
+  // mirror their VIN into the VIN set so service activity matching works too.
+  const ownedCars: EntityRecord[] = []
+  const seenCarId = new Set<string>()
+  for (const car of cars) {
+    const carVin = normalizeVIN(car.values.vin)
+    const matchedById = ownedCarIds.has(car.id)
+    const matchedByVin = carVin.length > 0 && ownedCarVins.has(carVin)
+    if (matchedById || matchedByVin) {
+      if (!seenCarId.has(car.id)) {
+        ownedCars.push(car)
+        seenCarId.add(car.id)
+        ownedCarIds.add(car.id)
+        if (carVin) ownedCarVins.add(carVin)
+      }
+    }
+  }
+
+  const carItems = ownedCars.map((car) =>
     rel(client.id, 'Автомобиль', carValue(car), CARS_STORE_KEY, car.id),
   )
 
+  // Step 3: every deal that references one of the client's cars OR names
+  // the client directly.
   const dealItems = deals
     .filter((deal) => {
       const carId = (deal.values.carRecordId ?? '').trim()
       const vin = normalizeVIN(deal.values.vin)
-      const dealClient = (deal.values.client ?? '').trim()
-      if (carId && clientCarIds.has(carId)) return true
-      if (vin && clientCarVins.has(vin)) return true
-      if (dealClient && dealClient === clientTitle) return true
+      const dealClient = normalizeName(deal.values.client)
+      if (carId && ownedCarIds.has(carId)) return true
+      if (vin && ownedCarVins.has(vin)) return true
+      if (dealClient.length > 0 && dealClient === clientName) return true
       return false
     })
     .map((deal) => rel(client.id, 'Сделка', dealValue(deal), DEALS_STORE_KEY, deal.id))
 
+  // Step 4: workorders and appointments are linked through the vehicle —
+  // a repair belongs to the car, and through the car to its owner.
   const workorderItems = workorders
     .filter((workorder) => {
       const vin = normalizeVIN(workorder.values.vin)
-      return vin.length > 0 && clientCarVins.has(vin)
+      return vin.length > 0 && ownedCarVins.has(vin)
     })
     .map((workorder) =>
       rel(client.id, 'Заказ-наряд', workorderValue(workorder), SERVICE_ORDERS_STORE_KEY, workorder.id),
@@ -117,7 +170,7 @@ export function deriveClientRelated(
   const appointmentItems = appointments
     .filter((appointment) => {
       const vin = normalizeVIN(appointment.values.vin)
-      return vin.length > 0 && clientCarVins.has(vin)
+      return vin.length > 0 && ownedCarVins.has(vin)
     })
     .map((appointment) =>
       rel(

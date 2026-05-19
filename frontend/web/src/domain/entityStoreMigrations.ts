@@ -1,4 +1,5 @@
 import { synchronizeCarStatuses } from './carStatusSync'
+import { CLIENTS_STORE_KEY, synchronizeClientRelated } from './clientRelatedSync'
 import { DEALS_STORE_KEY } from './dealCarInfo'
 import {
   applyFinancePaymentInvoiceContext,
@@ -799,6 +800,20 @@ export const entityStoreMigrationSteps: MigrationStep[] = [
   {
     key: 'car-status-sync',
     migrate: synchronizeCarStatuses,
+  },
+  {
+    key: 'client-related-rebuild',
+    migrate: (store) => {
+      const clients = store[CLIENTS_STORE_KEY]
+      if (!clients || clients.length === 0) {
+        return synchronizeClientRelated(store)
+      }
+      const reset: EntityStoreSnapshot = {
+        ...store,
+        [CLIENTS_STORE_KEY]: clients.map((client) => ({ ...client, related: [] })),
+      }
+      return synchronizeClientRelated(reset)
+    },
   },
 ]
 
