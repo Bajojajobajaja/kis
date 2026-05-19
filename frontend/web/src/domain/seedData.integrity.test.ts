@@ -238,6 +238,20 @@ describe('seedData integrity', () => {
     expect(errors).toEqual([])
   })
 
+  it('clients link only to cars (deals/orders/appointments reached via car)', () => {
+    const errors: string[] = []
+    const allowed = new Set(['crm-sales/cars'])
+    for (const client of seedData['crm-sales/clients'] ?? []) {
+      for (const r of client.related) {
+        if (!r.storeKey) continue
+        if (!allowed.has(r.storeKey)) {
+          errors.push(`${client.id} has direct link to ${r.storeKey}/${r.recordId} — should go via car`)
+        }
+      }
+    }
+    expect(errors).toEqual([])
+  })
+
   it('client.ownerClient ↔ car bidirectional', () => {
     const errors: string[] = []
     const clients = seedData['crm-sales/clients'] ?? []

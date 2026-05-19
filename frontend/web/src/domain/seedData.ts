@@ -166,11 +166,8 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'fleet@autopark.ru',
     }, {
       related: [
-        rel('CL-1001-car-1001', 'Автомобиль', 'CAR-1001 — Toyota Camry 2020 (VIN XW7BF4FK30S123456)', 'crm-sales/cars', 'CAR-1001'),
+        rel('CL-1001-car-1001', 'Автомобиль', 'CAR-1001 — Toyota Camry 2020 (VIN XW7BF4FK30S123456) • активна сделка DL-3001, открыт заказ-наряд WO-10031', 'crm-sales/cars', 'CAR-1001'),
         rel('CL-1001-car-1004', 'Автомобиль', 'CAR-1004 — Volkswagen Tiguan 2022 (VIN WVGZZZ5NZNP112233)', 'crm-sales/cars', 'CAR-1004'),
-        rel('CL-1001-deal-3001', 'Сделка по CAR-1001', 'DL-3001 — Toyota Camry 2.5', 'crm-sales/deals', 'DL-3001'),
-        rel('CL-1001-wo-10031', 'Заказ-наряд по CAR-1001', 'WO-10031 — ТО + диагностика', 'service/orders', 'WO-10031'),
-        rel('CL-1001-ap-1102', 'Запись на сервис по CAR-1001', 'AP-1102 — Проверка кондиционера', 'service/appointments', 'AP-1102'),
       ],
     }),
     row('CL-1002', 'Иван Петров', 'Розничный клиент', 'paused', {
@@ -180,11 +177,8 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'petrov@mail.ru',
     }, {
       related: [
-        rel('CL-1002-car-1002', 'Автомобиль', 'CAR-1002 — Hyundai Tucson 2021 (VIN KMHJB81BPNU191245)', 'crm-sales/cars', 'CAR-1002'),
+        rel('CL-1002-car-1002', 'Автомобиль', 'CAR-1002 — Hyundai Tucson 2021 (VIN KMHJB81BPNU191245) • в сервисе по WO-10032, активна сделка DL-3002', 'crm-sales/cars', 'CAR-1002'),
         rel('CL-1002-car-1005', 'Автомобиль', 'CAR-1005 — BMW X5 2020 (VIN WBAKS610X0X334455)', 'crm-sales/cars', 'CAR-1005'),
-        rel('CL-1002-deal-3002', 'Сделка по CAR-1002', 'DL-3002 — Hyundai Tucson', 'crm-sales/deals', 'DL-3002'),
-        rel('CL-1002-wo-10032', 'Заказ-наряд по CAR-1002', 'WO-10032 — Ремонт ходовой части', 'service/orders', 'WO-10032'),
-        rel('CL-1002-ap-1101', 'Запись на сервис по CAR-1002', 'AP-1101 — Регламентное ТО', 'service/appointments', 'AP-1101'),
       ],
     }),
     row('CL-1003', 'АО ТехТранс', 'Лизинговый клиент', 'archived', {
@@ -194,11 +188,8 @@ export const seedData: Record<string, EntityRecord[]> = {
       email: 'office@tehtrans.ru',
     }, {
       related: [
-        rel('CL-1003-car-1003', 'Автомобиль', 'CAR-1003 — KIA Sorento 2019 (VIN XWEPM81BDM0001183)', 'crm-sales/cars', 'CAR-1003'),
+        rel('CL-1003-car-1003', 'Автомобиль', 'CAR-1003 — KIA Sorento 2019 (VIN XWEPM81BDM0001183) • в архиве, сделка DL-3003 закрыта', 'crm-sales/cars', 'CAR-1003'),
         rel('CL-1003-car-1006', 'Автомобиль', 'CAR-1006 — Skoda Octavia 2018 (VIN TMBJK7NE6J0123456)', 'crm-sales/cars', 'CAR-1006'),
-        rel('CL-1003-deal-3003', 'Сделка по CAR-1003', 'DL-3003 — KIA Sorento (закрыта)', 'crm-sales/deals', 'DL-3003'),
-        rel('CL-1003-wo-10033', 'Заказ-наряд по CAR-1003', 'WO-10033 — Проверка после ремонта', 'service/orders', 'WO-10033'),
-        rel('CL-1003-ap-1103', 'Запись на сервис по CAR-1003', 'AP-1103 — Экстренный ремонт', 'service/appointments', 'AP-1103'),
       ],
     }),
     row('CL-1004', 'ООО ДрайвТорг', 'Корпоративный клиент', 'active', {
@@ -209,13 +200,9 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       history: historyMarch('cl-1004', 'Текущий статус: active'),
       related: [
-        rel('CL-1004-car-1007', 'Автомобиль', 'CAR-1007 — Mazda CX-5 2022 (VIN JMZKE6HY3N1234567)', 'crm-sales/cars', 'CAR-1007'),
-        rel('CL-1004-car-1011', 'Автомобиль', 'CAR-1011 — Renault Duster 2021 (VIN VF1HSJD0H54123456)', 'crm-sales/cars', 'CAR-1011'),
-        rel('CL-1004-car-1015', 'Автомобиль', 'CAR-1015 — Volvo XC60 2022 (VIN YV4A22RK7N1234567)', 'crm-sales/cars', 'CAR-1015'),
-        rel('CL-1004-deal-3004', 'Сделка по CAR-1007', 'DL-3004 — Mazda CX-5 2022 (закрыта)', 'crm-sales/deals', 'DL-3004'),
-        rel('CL-1004-deal-3008', 'Сделка по CAR-1015', 'DL-3008 — Volvo XC60 2022', 'crm-sales/deals', 'DL-3008'),
-        rel('CL-1004-wo-10037', 'Заказ-наряд по CAR-1011', 'WO-10037 — ТО-60 + фильтры', 'service/orders', 'WO-10037'),
-        rel('CL-1004-ap-1107', 'Запись на сервис по CAR-1011', 'AP-1107 — ТО-60 Renault Duster', 'service/appointments', 'AP-1107'),
+        rel('CL-1004-car-1007', 'Автомобиль', 'CAR-1007 — Mazda CX-5 2022 (VIN JMZKE6HY3N1234567) • продан по сделке DL-3004', 'crm-sales/cars', 'CAR-1007'),
+        rel('CL-1004-car-1011', 'Автомобиль', 'CAR-1011 — Renault Duster 2021 (VIN VF1HSJD0H54123456) • в сервисе по WO-10037', 'crm-sales/cars', 'CAR-1011'),
+        rel('CL-1004-car-1015', 'Автомобиль', 'CAR-1015 — Volvo XC60 2022 (VIN YV4A22RK7N1234567) • активна сделка DL-3008', 'crm-sales/cars', 'CAR-1015'),
       ],
     }),
     row('CL-1005', 'Алексей Сидоров', 'Розничный клиент', 'active', {
@@ -226,13 +213,9 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       history: historyMarch('cl-1005', 'Текущий статус: active'),
       related: [
-        rel('CL-1005-car-1008', 'Автомобиль', 'CAR-1008 — Nissan Qashqai 2023 (VIN SJNFAAJ11U2345678)', 'crm-sales/cars', 'CAR-1008'),
-        rel('CL-1005-car-1009', 'Автомобиль', 'CAR-1009 — Audi A4 2021 (VIN WAUZZZ8V0NA123456)', 'crm-sales/cars', 'CAR-1009'),
-        rel('CL-1005-car-1016', 'Автомобиль', 'CAR-1016 — Geely Atlas Pro 2023 (VIN L6T78Y4E3NE123456)', 'crm-sales/cars', 'CAR-1016'),
-        rel('CL-1005-deal-3005', 'Сделка по CAR-1009', 'DL-3005 — Audi A4 2021 (закрыта)', 'crm-sales/deals', 'DL-3005'),
-        rel('CL-1005-deal-3009', 'Сделка по CAR-1016', 'DL-3009 — Geely Atlas Pro 2023 (закрыта)', 'crm-sales/deals', 'DL-3009'),
-        rel('CL-1005-wo-10034', 'Заказ-наряд по CAR-1008', 'WO-10034 — ТО + замена масла', 'service/orders', 'WO-10034'),
-        rel('CL-1005-ap-1104', 'Запись на сервис по CAR-1008', 'AP-1104 — Замена масла Nissan Qashqai', 'service/appointments', 'AP-1104'),
+        rel('CL-1005-car-1008', 'Автомобиль', 'CAR-1008 — Nissan Qashqai 2023 (VIN SJNFAAJ11U2345678) • в сервисе по WO-10034', 'crm-sales/cars', 'CAR-1008'),
+        rel('CL-1005-car-1009', 'Автомобиль', 'CAR-1009 — Audi A4 2021 (VIN WAUZZZ8V0NA123456) • продан по сделке DL-3005', 'crm-sales/cars', 'CAR-1009'),
+        rel('CL-1005-car-1016', 'Автомобиль', 'CAR-1016 — Geely Atlas Pro 2023 (VIN L6T78Y4E3NE123456) • продан по сделке DL-3009', 'crm-sales/cars', 'CAR-1016'),
       ],
     }),
     row('CL-1006', 'ИП Козлов К.К.', 'Малый бизнес', 'active', {
@@ -243,11 +226,8 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       history: historyApril('cl-1006', 'Текущий статус: active'),
       related: [
-        rel('CL-1006-car-1010', 'Автомобиль', 'CAR-1010 — Mercedes C-Class 2022 (VIN WDD2050881A234567)', 'crm-sales/cars', 'CAR-1010'),
-        rel('CL-1006-car-1013', 'Автомобиль', 'CAR-1013 — Ford Kuga 2022 (VIN WF0XXXGCDXNY12345)', 'crm-sales/cars', 'CAR-1013'),
-        rel('CL-1006-deal-3006', 'Сделка по CAR-1010', 'DL-3006 — Mercedes C-Class 2022', 'crm-sales/deals', 'DL-3006'),
-        rel('CL-1006-wo-10035', 'Заказ-наряд по CAR-1013', 'WO-10035 — Ремонт подвески (закрыт)', 'service/orders', 'WO-10035'),
-        rel('CL-1006-ap-1105', 'Запись на сервис по CAR-1013', 'AP-1105 — Ремонт подвески Ford Kuga', 'service/appointments', 'AP-1105'),
+        rel('CL-1006-car-1010', 'Автомобиль', 'CAR-1010 — Mercedes C-Class 2022 (VIN WDD2050881A234567) • активна сделка DL-3006', 'crm-sales/cars', 'CAR-1010'),
+        rel('CL-1006-car-1013', 'Автомобиль', 'CAR-1013 — Ford Kuga 2022 (VIN WF0XXXGCDXNY12345) • в сервисе по WO-10035', 'crm-sales/cars', 'CAR-1013'),
       ],
     }),
     row('CL-1007', 'АО МоторГрупп', 'Корпоративный клиент', 'active', {
@@ -258,11 +238,8 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       history: historyApril('cl-1007', 'Текущий статус: active'),
       related: [
-        rel('CL-1007-car-1012', 'Автомобиль', 'CAR-1012 — Lexus RX 2023 (VIN JTJBAMCA1N2345678)', 'crm-sales/cars', 'CAR-1012'),
-        rel('CL-1007-car-1014', 'Автомобиль', 'CAR-1014 — Mitsubishi Outlander 2021 (VIN JMBXTGG3WNZ123456)', 'crm-sales/cars', 'CAR-1014'),
-        rel('CL-1007-deal-3007', 'Сделка по CAR-1012', 'DL-3007 — Lexus RX 2023 (закрыта)', 'crm-sales/deals', 'DL-3007'),
-        rel('CL-1007-wo-10036', 'Заказ-наряд по CAR-1014', 'WO-10036 — Диагностика двигателя', 'service/orders', 'WO-10036'),
-        rel('CL-1007-ap-1106', 'Запись на сервис по CAR-1014', 'AP-1106 — Диагностика Outlander', 'service/appointments', 'AP-1106'),
+        rel('CL-1007-car-1012', 'Автомобиль', 'CAR-1012 — Lexus RX 2023 (VIN JTJBAMCA1N2345678) • продан по сделке DL-3007', 'crm-sales/cars', 'CAR-1012'),
+        rel('CL-1007-car-1014', 'Автомобиль', 'CAR-1014 — Mitsubishi Outlander 2021 (VIN JMBXTGG3WNZ123456) • в сервисе по WO-10036', 'crm-sales/cars', 'CAR-1014'),
       ],
     }),
   ],
