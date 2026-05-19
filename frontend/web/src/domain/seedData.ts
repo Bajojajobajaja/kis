@@ -72,20 +72,20 @@ function purchaseRef(id: string, title: string): string {
   return `${id}: ${title}`
 }
 
-function documentRef(number: string): string {
-  return `Накладная ${number}`
+function documentRef(number: string, id?: string): string {
+  return id ? `${id}: Накладная ${number}` : `Накладная ${number}`
 }
 
 function invoiceRef(number: string): string {
-  return `Входящий счет ${number}`
+  return `${number}: Входящий счет`
 }
 
-function salesContractRef(number: string): string {
-  return `Договор ${number}`
+function salesContractRef(number: string, id?: string): string {
+  return id ? `${id}: Договор ${number}` : `Договор ${number}`
 }
 
 function salesInvoiceRef(number: string): string {
-  return `Счет ${number}`
+  return `${number}: Счет`
 }
 
 function carRef(id: string, title: string): string {
@@ -122,7 +122,7 @@ function purchaseRelated(
   const stock = stockCatalog[stockId]
   return [
     rel(`${purchaseId}-stock`, 'Товар', stockRef(stockId, stock.title, stock.sku), 'inventory/stock', stockId),
-    rel(`${purchaseId}-doc`, 'Накладная', documentRef(documentNumber), 'inventory/documents', documentId),
+    rel(`${purchaseId}-doc`, 'Накладная', documentRef(documentNumber, documentId), 'inventory/documents', documentId),
     rel(`${purchaseId}-inv`, 'Счет поставщика', invoiceRef(invoiceNumber), 'finance/invoices', invoiceId),
   ]
 }
@@ -153,7 +153,7 @@ function invoiceRelated(
   return [
     rel(`${purchaseId}-purchase`, 'Закупка', purchaseRef(purchaseId, purchaseTitle), 'inventory/purchases', purchaseId),
     rel(`${purchaseId}-stock`, 'Товар', stockRef(stockId, stock.title, stock.sku), 'inventory/stock', stockId),
-    rel(`${purchaseId}-doc`, 'Накладная', documentRef(documentNumber), 'inventory/documents', documentId),
+    rel(`${purchaseId}-doc`, 'Накладная', documentRef(documentNumber, documentId), 'inventory/documents', documentId),
   ]
 }
 
@@ -293,7 +293,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       related: [
         rel('DL-3001-car', 'Автомобиль', carRef('CAR-1001', 'Toyota Camry 2020'), 'crm-sales/cars', 'CAR-1001'),
-        rel('DL-3001-doc', 'Договор', salesContractRef('CTR-80011'), 'crm-sales/documents', 'DOC-4001'),
+        rel('DL-3001-doc', 'Договор', salesContractRef('CTR-80011', 'DOC-4001'), 'crm-sales/documents', 'DOC-4001'),
         rel('DL-3001-inv', 'Счет', salesInvoiceRef('INV-100103'), 'finance/invoices', 'INV-100103'),
       ],
     }),
@@ -309,7 +309,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       related: [
         rel('DL-3002-car', 'Автомобиль', carRef('CAR-1002', 'Hyundai Tucson 2021'), 'crm-sales/cars', 'CAR-1002'),
-        rel('DL-3002-doc', 'Договор', salesContractRef('CTR-80012'), 'crm-sales/documents', 'DOC-4002'),
+        rel('DL-3002-doc', 'Договор', salesContractRef('CTR-80012', 'DOC-4002'), 'crm-sales/documents', 'DOC-4002'),
         rel('DL-3002-inv', 'Счет', salesInvoiceRef('INV-100104'), 'finance/invoices', 'INV-100104'),
       ],
     }),
@@ -325,7 +325,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       related: [
         rel('DL-3003-car', 'Автомобиль', carRef('CAR-1003', 'KIA Sorento 2019'), 'crm-sales/cars', 'CAR-1003'),
-        rel('DL-3003-doc', 'Договор', salesContractRef('CTR-80013'), 'crm-sales/documents', 'DOC-4003'),
+        rel('DL-3003-doc', 'Договор', salesContractRef('CTR-80013', 'DOC-4003'), 'crm-sales/documents', 'DOC-4003'),
         rel('DL-3003-inv', 'Счет', salesInvoiceRef('INV-100105'), 'finance/invoices', 'INV-100105'),
       ],
     }),
@@ -342,7 +342,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('dl-3004', 'Сделка закрыта'),
       related: [
         rel('DL-3004-car', 'Автомобиль', carRef('CAR-1007', 'Mazda CX-5 2022'), 'crm-sales/cars', 'CAR-1007'),
-        rel('DL-3004-doc', 'Договор', salesContractRef('CTR-80014'), 'crm-sales/documents', 'DOC-4004'),
+        rel('DL-3004-doc', 'Договор', salesContractRef('CTR-80014', 'DOC-4004'), 'crm-sales/documents', 'DOC-4004'),
         rel('DL-3004-inv', 'Счет', salesInvoiceRef('INV-100114'), 'finance/invoices', 'INV-100114'),
       ],
     }),
@@ -359,7 +359,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('dl-3005', 'Сделка закрыта'),
       related: [
         rel('DL-3005-car', 'Автомобиль', carRef('CAR-1009', 'Audi A4 2021'), 'crm-sales/cars', 'CAR-1009'),
-        rel('DL-3005-doc', 'Договор', salesContractRef('CTR-80015'), 'crm-sales/documents', 'DOC-4005'),
+        rel('DL-3005-doc', 'Договор', salesContractRef('CTR-80015', 'DOC-4005'), 'crm-sales/documents', 'DOC-4005'),
         rel('DL-3005-inv', 'Счет', salesInvoiceRef('INV-100115'), 'finance/invoices', 'INV-100115'),
       ],
     }),
@@ -376,7 +376,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('dl-3006', 'Текущий статус: new'),
       related: [
         rel('DL-3006-car', 'Автомобиль', carRef('CAR-1010', 'Mercedes C-Class 2022'), 'crm-sales/cars', 'CAR-1010'),
-        rel('DL-3006-doc', 'Договор', salesContractRef('CTR-80016'), 'crm-sales/documents', 'DOC-4006'),
+        rel('DL-3006-doc', 'Договор', salesContractRef('CTR-80016', 'DOC-4006'), 'crm-sales/documents', 'DOC-4006'),
         rel('DL-3006-inv', 'Счет', salesInvoiceRef('INV-100116'), 'finance/invoices', 'INV-100116'),
       ],
     }),
@@ -393,7 +393,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('dl-3007', 'Сделка закрыта'),
       related: [
         rel('DL-3007-car', 'Автомобиль', carRef('CAR-1012', 'Lexus RX 2023'), 'crm-sales/cars', 'CAR-1012'),
-        rel('DL-3007-doc', 'Договор', salesContractRef('CTR-80017'), 'crm-sales/documents', 'DOC-4007'),
+        rel('DL-3007-doc', 'Договор', salesContractRef('CTR-80017', 'DOC-4007'), 'crm-sales/documents', 'DOC-4007'),
         rel('DL-3007-inv', 'Счет', salesInvoiceRef('INV-100117'), 'finance/invoices', 'INV-100117'),
       ],
     }),
@@ -410,7 +410,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('dl-3008', 'Текущий статус: new'),
       related: [
         rel('DL-3008-car', 'Автомобиль', carRef('CAR-1015', 'Volvo XC60 2022'), 'crm-sales/cars', 'CAR-1015'),
-        rel('DL-3008-doc', 'Договор', salesContractRef('CTR-80018'), 'crm-sales/documents', 'DOC-4008'),
+        rel('DL-3008-doc', 'Договор', salesContractRef('CTR-80018', 'DOC-4008'), 'crm-sales/documents', 'DOC-4008'),
         rel('DL-3008-inv', 'Счет', salesInvoiceRef('INV-100118'), 'finance/invoices', 'INV-100118'),
       ],
     }),
@@ -427,7 +427,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('dl-3009', 'Сделка закрыта'),
       related: [
         rel('DL-3009-car', 'Автомобиль', carRef('CAR-1016', 'Geely Atlas Pro 2023'), 'crm-sales/cars', 'CAR-1016'),
-        rel('DL-3009-doc', 'Договор', salesContractRef('CTR-80019'), 'crm-sales/documents', 'DOC-4009'),
+        rel('DL-3009-doc', 'Договор', salesContractRef('CTR-80019', 'DOC-4009'), 'crm-sales/documents', 'DOC-4009'),
         rel('DL-3009-inv', 'Счет', salesInvoiceRef('INV-100119'), 'finance/invoices', 'INV-100119'),
       ],
     }),
@@ -1217,7 +1217,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       related: [
         rel('INV-100103-deal', 'Сделка', 'DL-3001: Сделка: Toyota Camry 2.5', 'crm-sales/deals', 'DL-3001'),
-        rel('INV-100103-doc', 'Договор', salesContractRef('CTR-80011'), 'crm-sales/documents', 'DOC-4001'),
+        rel('INV-100103-doc', 'Договор', salesContractRef('CTR-80011', 'DOC-4001'), 'crm-sales/documents', 'DOC-4001'),
       ],
     }),
     row('INV-100104', 'Исходящий счет INV-100104', 'Сделка DL-3002 • Иван Петров • Исходящий', 'issued', {
@@ -1225,14 +1225,14 @@ export const seedData: Record<string, EntityRecord[]> = {
       counterparty: 'Иван Петров',
       direction: 'outgoing',
       amount: '2 780 000',
-      paidAmount: '0',
+      paidAmount: '1 200 000',
       dueDate: '2026-03-07',
       owner: 'Финансовый отдел',
       dealId: 'DL-3002',
     }, {
       related: [
         rel('INV-100104-deal', 'Сделка', 'DL-3002: Сделка: Hyundai Tucson', 'crm-sales/deals', 'DL-3002'),
-        rel('INV-100104-doc', 'Договор', salesContractRef('CTR-80012'), 'crm-sales/documents', 'DOC-4002'),
+        rel('INV-100104-doc', 'Договор', salesContractRef('CTR-80012', 'DOC-4002'), 'crm-sales/documents', 'DOC-4002'),
       ],
     }),
     row('INV-100105', 'Исходящий счет INV-100105', 'Сделка DL-3003 • АО ТехТранс • Исходящий', 'paid', {
@@ -1247,7 +1247,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }, {
       related: [
         rel('INV-100105-deal', 'Сделка', 'DL-3003: Сделка: KIA Sorento', 'crm-sales/deals', 'DL-3003'),
-        rel('INV-100105-doc', 'Договор', salesContractRef('CTR-80013'), 'crm-sales/documents', 'DOC-4003'),
+        rel('INV-100105-doc', 'Договор', salesContractRef('CTR-80013', 'DOC-4003'), 'crm-sales/documents', 'DOC-4003'),
       ],
     }),
     row('INV-100113', 'Входящий счет INV-100113', 'Закупка PO-2208 • Подвеска-Сервис', 'issued', {
@@ -1365,7 +1365,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('inv-100114', 'Счет оплачен'),
       related: [
         rel('INV-100114-deal', 'Сделка', 'DL-3004: Сделка: Mazda CX-5 2022', 'crm-sales/deals', 'DL-3004'),
-        rel('INV-100114-doc', 'Договор', salesContractRef('CTR-80014'), 'crm-sales/documents', 'DOC-4004'),
+        rel('INV-100114-doc', 'Договор', salesContractRef('CTR-80014', 'DOC-4004'), 'crm-sales/documents', 'DOC-4004'),
       ],
     }),
     row('INV-100115', 'Исходящий счет INV-100115', 'Сделка DL-3005 • Алексей Сидоров • Исходящий', 'paid', {
@@ -1381,7 +1381,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('inv-100115', 'Счет оплачен'),
       related: [
         rel('INV-100115-deal', 'Сделка', 'DL-3005: Сделка: Audi A4 2021', 'crm-sales/deals', 'DL-3005'),
-        rel('INV-100115-doc', 'Договор', salesContractRef('CTR-80015'), 'crm-sales/documents', 'DOC-4005'),
+        rel('INV-100115-doc', 'Договор', salesContractRef('CTR-80015', 'DOC-4005'), 'crm-sales/documents', 'DOC-4005'),
       ],
     }),
     row('INV-100116', 'Исходящий счет INV-100116', 'Сделка DL-3006 • ИП Козлов К.К. • Исходящий', 'issued', {
@@ -1397,7 +1397,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('inv-100116', 'Счет выставлен'),
       related: [
         rel('INV-100116-deal', 'Сделка', 'DL-3006: Сделка: Mercedes C-Class 2022', 'crm-sales/deals', 'DL-3006'),
-        rel('INV-100116-doc', 'Договор', salesContractRef('CTR-80016'), 'crm-sales/documents', 'DOC-4006'),
+        rel('INV-100116-doc', 'Договор', salesContractRef('CTR-80016', 'DOC-4006'), 'crm-sales/documents', 'DOC-4006'),
       ],
     }),
     row('INV-100117', 'Исходящий счет INV-100117', 'Сделка DL-3007 • АО МоторГрупп • Исходящий', 'paid', {
@@ -1413,7 +1413,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('inv-100117', 'Счет оплачен'),
       related: [
         rel('INV-100117-deal', 'Сделка', 'DL-3007: Сделка: Lexus RX 2023', 'crm-sales/deals', 'DL-3007'),
-        rel('INV-100117-doc', 'Договор', salesContractRef('CTR-80017'), 'crm-sales/documents', 'DOC-4007'),
+        rel('INV-100117-doc', 'Договор', salesContractRef('CTR-80017', 'DOC-4007'), 'crm-sales/documents', 'DOC-4007'),
       ],
     }),
     row('INV-100118', 'Исходящий счет INV-100118', 'Сделка DL-3008 • ООО ДрайвТорг • Исходящий', 'issued', {
@@ -1429,7 +1429,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('inv-100118', 'Счет выставлен'),
       related: [
         rel('INV-100118-deal', 'Сделка', 'DL-3008: Сделка: Volvo XC60 2022', 'crm-sales/deals', 'DL-3008'),
-        rel('INV-100118-doc', 'Договор', salesContractRef('CTR-80018'), 'crm-sales/documents', 'DOC-4008'),
+        rel('INV-100118-doc', 'Договор', salesContractRef('CTR-80018', 'DOC-4008'), 'crm-sales/documents', 'DOC-4008'),
       ],
     }),
     row('INV-100119', 'Исходящий счет INV-100119', 'Сделка DL-3009 • Алексей Сидоров • Исходящий', 'paid', {
@@ -1445,7 +1445,7 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyApril('inv-100119', 'Счет оплачен'),
       related: [
         rel('INV-100119-deal', 'Сделка', 'DL-3009: Сделка: Geely Atlas Pro 2023', 'crm-sales/deals', 'DL-3009'),
-        rel('INV-100119-doc', 'Договор', salesContractRef('CTR-80019'), 'crm-sales/documents', 'DOC-4009'),
+        rel('INV-100119-doc', 'Договор', salesContractRef('CTR-80019', 'DOC-4009'), 'crm-sales/documents', 'DOC-4009'),
       ],
     }),
     row('INV-100120', 'Исходящий счет INV-100120', 'Заказ-наряд WO-10034 • Алексей Сидоров • Исходящий', 'paid', {
@@ -1643,7 +1643,7 @@ export const seedData: Record<string, EntityRecord[]> = {
     }),
   ],
   'finance/reports': [
-    row('RPT-3201', 'AR/AP Март', 'Период 03.2026 • Открыто 10 485 600', 'generated', {
+    row('RPT-3201', 'AR/AP Март', 'Период 03.2026 • Открыто 9 285 600', 'generated', {
       type: 'ar-ap',
       period: '03.2026',
       format: 'PDF',
@@ -1651,8 +1651,8 @@ export const seedData: Record<string, EntityRecord[]> = {
       incomingIssuedTotal: '1 414 100',
       incomingPaidTotal: '258 500',
       outgoingIssuedTotal: '15 900 000',
-      outgoingPaidTotal: '6 570 000',
-      openInvoiceTotal: '10 485 600',
+      outgoingPaidTotal: '7 770 000',
+      openInvoiceTotal: '9 285 600',
       reconciledPaymentsTotal: '6 630 000',
       invoiceCount: '14',
       paymentCount: '7',
@@ -1660,35 +1660,35 @@ export const seedData: Record<string, EntityRecord[]> = {
       history: historyMarch('rpt-3201', 'Отчет сформирован'),
       related: [],
     }),
-    row('RPT-3202', 'AR/AP Февраль', 'Период 02.2026 • Открыто 4 120 600', 'generated', {
+    row('RPT-3202', 'AR/AP Февраль', 'Период 02.2026 • Открыто 0', 'generated', {
       type: 'ar-ap',
       period: '02.2026',
       format: 'PDF',
       owner: 'Финансовый менеджер',
-      incomingIssuedTotal: '1 414 100',
-      incomingPaidTotal: '258 500',
-      outgoingIssuedTotal: '6 085 000',
+      incomingIssuedTotal: '0',
+      incomingPaidTotal: '0',
+      outgoingIssuedTotal: '3 120 000',
       outgoingPaidTotal: '3 120 000',
-      openInvoiceTotal: '4 120 600',
-      reconciledPaymentsTotal: '3 180 000',
-      invoiceCount: '9',
-      paymentCount: '5',
+      openInvoiceTotal: '0',
+      reconciledPaymentsTotal: '3 120 000',
+      invoiceCount: '1',
+      paymentCount: '1',
     }, {
       related: [],
     }),
-    row('RPT-3203', 'Cashflow Январь', 'Период 01.2026 • Открыто 3 480 000', 'archived', {
+    row('RPT-3203', 'Cashflow Январь', 'Период 01.2026 • Открыто 0', 'archived', {
       type: 'cashflow',
       period: '01.2026',
       format: 'CSV',
       owner: 'Финансовый менеджер',
-      incomingIssuedTotal: '980 000',
-      incomingPaidTotal: '210 000',
-      outgoingIssuedTotal: '4 250 000',
-      outgoingPaidTotal: '1 760 000',
-      openInvoiceTotal: '3 480 000',
-      reconciledPaymentsTotal: '1 970 000',
-      invoiceCount: '7',
-      paymentCount: '4',
+      incomingIssuedTotal: '0',
+      incomingPaidTotal: '0',
+      outgoingIssuedTotal: '0',
+      outgoingPaidTotal: '0',
+      openInvoiceTotal: '0',
+      reconciledPaymentsTotal: '0',
+      invoiceCount: '0',
+      paymentCount: '0',
     }, {
       related: [],
     }),
