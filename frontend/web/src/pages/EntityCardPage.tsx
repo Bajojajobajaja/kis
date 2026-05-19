@@ -1914,7 +1914,7 @@ function EntityCardView({ subsystem, tab: rawTab, storeKey, record }: EntityCard
     if (phoneValue) {
       const normalized = normalizePhoneStrict(phoneValue)
       if (!normalized.ok) {
-        setEditError('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        setEditError('Неверный формат телефона. Используйте +7 XXX XXXXXXX.')
         return
       }
       nextValues.phone = normalized.formatted

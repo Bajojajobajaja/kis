@@ -23,7 +23,7 @@ export function normalizePhoneStrict(value: string): { ok: boolean; formatted: s
   if (!digits) {
     return { ok: false, formatted: '' }
   }
-  if (digits.length !== 11 || digits[0] !== '7' || digits[1] !== '9') {
+  if (digits.length !== 11 || digits[0] !== '7') {
     return { ok: false, formatted: '' }
   }
   const part1 = digits.slice(1, 4)

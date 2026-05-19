@@ -956,7 +956,7 @@ function EntityListPageContent({ subsystem, tab: rawTab }: EntityListPageContent
     if (phoneValue) {
       const normalized = normalizePhoneStrict(phoneValue)
       if (!normalized.ok) {
-        setCreateError('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        setCreateError('Неверный формат телефона. Используйте +7 XXX XXXXXXX.')
         return
       }
       values.phone = normalized.formatted

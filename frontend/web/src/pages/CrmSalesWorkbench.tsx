@@ -271,7 +271,7 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
     if (rawPhone) {
       const normalized = normalizePhoneStrict(rawPhone)
       if (!normalized.ok) {
-        setNotice('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        setNotice('Неверный формат телефона. Используйте +7 XXX XXXXXXX.')
         return
       }
       phone = normalized.formatted
@@ -304,7 +304,7 @@ export function CrmSalesWorkbench({ item }: { item: SubsystemNavItem }) {
     if (rawPhone) {
       const normalized = normalizePhoneStrict(rawPhone)
       if (!normalized.ok) {
-        setNotice('Неверный формат телефона. Используйте +7 9XX XXXXXXX.')
+        setNotice('Неверный формат телефона. Используйте +7 XXX XXXXXXX.')
         return
       }
       phone = normalized.formatted
